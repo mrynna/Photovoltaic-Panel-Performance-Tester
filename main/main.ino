@@ -2,6 +2,11 @@
 
 Adafruit_ADS1115 ads;
 
+// Relay
+int relay1 = 52;
+int relay2 = 50;
+//endOf Relay
+
 // Voltage Divider
 long adc0 = 0.0; 
 float R1 = 9752.0; //Resistor 1, 
@@ -17,18 +22,34 @@ float current = 0.0, current2 = 0.0;
 
 void setup(){
    Serial.begin(9600);
+   pinMode(relay1, OUTPUT);
+   pinMode(relay2, OUTPUT);
    if (!ads.begin()) {
     Serial.println("Failed to initialize ADS."); // Print in Serial Monitor if ADS1115 fail to initialize
     while (1);
    }
+   digitalWrite(relay1, HIGH);
+   digitalWrite(relay2, HIGH);
+   delay(3000);
 }
 
 void loop(){
 
-   readVoltage(0);
-   readCurrent(1);
+   digitalWrite(relay1, LOW);
+   for(int i = 0; i < 10; i++){
+      readVoltage(0);
+      delay(900);
+   }
+   digitalWrite(relay1, HIGH);
+   delay(3000);
+   digitalWrite(relay2, LOW);
+   for(int i = 0; i < 10; i++){
+      readCurrent(1);
+      delay(900);
+   }
+   digitalWrite(relay2, HIGH);
    Serial.println("");
-   delay(1000);
+   delay(3000);
 
 }
 
@@ -63,7 +84,7 @@ void readCurrent(int inputPin){
    volts1 = 0.0;
    for(int i = 0; i < 10; i++){
       adc1 = ads.readADC_SingleEnded(inputPin); // read ADC from inputPin of ADS1115
-      current += (adc1 - 13333) * 0.1875 / 10; // convert ADS1115 ADC to Current
+      current += (adc1 - 12962) * 0.1875 / 10; // convert ADS1115 ADC to Current
       delay(1);
    }
    volts1 = ads.computeVolts(adc1); // convert ADS1115 A0 ADC to Voltage
