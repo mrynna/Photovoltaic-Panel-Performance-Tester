@@ -1,6 +1,9 @@
 #include <Adafruit_ADS1X15.h>
+#include <Wire.h>
+#include <BH1750.h>
 
-Adafruit_ADS1115 ads;
+BH1750 luxMeter; // BH1750 Object
+Adafruit_ADS1115 ads; // ADS1115 Object
 
 // Relay
 int relay1 = 52;
@@ -28,6 +31,8 @@ void setup(){
     Serial.println("Failed to initialize ADS."); // Print in Serial Monitor if ADS1115 fail to initialize
     while (1);
    }
+   Wire.begin();
+   luxMeter.begin();
    digitalWrite(relay1, HIGH);
    digitalWrite(relay2, HIGH);
    delay(3000);
@@ -50,6 +55,9 @@ void loop(){
    digitalWrite(relay2, HIGH);
    Serial.println("");
    delay(3000);
+
+   readIradiasi();
+   delay(2000);
 
 }
 
@@ -112,4 +120,29 @@ void readCurrent(int inputPin){
    Serial.print(current2);
    Serial.println(" A");
    delay(1);
+}
+
+void readIradiasi(){
+   float LUX = luxMeter.readLightLevel();
+   float calLUX;
+   if (LUX < 20.0){
+      calLUX = LUX * 3.72;
+   }else if(LUX >= 20.0 && LUX <= 50){
+      calLUX = LUX * 3.53;
+   }else if(LUX > 50.0 && LUX < 120){
+      calLUX = LUX * 3.3;
+   }else if(LUX >= 120.0){
+      calLUX = LUX * 3.12;
+   }
+   else{
+      calLUX = LUX;
+   }
+   Serial.print("Cahaya: ");
+   Serial.print(LUX);
+   Serial.print("  |  ");
+   Serial.print(calLUX);
+   Serial.println(" LUX");
+   float radiasi = calLUX*0.0079;
+   Serial.print (radiasi);
+   Serial.println(" W/M2");
 }
