@@ -7,6 +7,9 @@
 #include <DallasTemperature.h>
 #include <BH1750.h>
 #include <MAX6675.h>
+#include <RTClib.h>
+#include <SPI.h>
+#include <SD.h>
 
 void backButton(String *, void (*)());
 void drawMultimeter();
@@ -18,6 +21,14 @@ void drawSetting();
 String kirim = "";
 bool otomatis, statusKirim = false, statusKirimM = false;
 //=================================================================
+
+//=======================RTC SD Card================================
+RTC_DS1307 rtc;
+File file;
+char namaHari[7][12] = {"Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"};
+String hari = "";
+String waktu = "";
+//==================================================================
 
 // ================================= LCD TFT 3.2 ===================================
 // Creating Objects
@@ -107,7 +118,7 @@ BH1750 lightMeter;
 //==========================
 
 //======================================Data Variables===================================
-float arusA, arusmA, voltV, voltmV, lux, calLux, iradiasi, dayaW, dayamW, performa; 
+float arusA, arusmA, voltV, voltmV, lux, calLux, iradiasi, dayaW, dayamW, performa;
 float suhuPanelC, suhuPanelF, suhuLingkunganC, suhuLingkunganF;
 int adc = 13300, calValue;
 //=======================================================================================
@@ -123,6 +134,20 @@ void setup() {
   Wire.begin();
   DS18B20.begin();
   lightMeter.begin();
+  if (! rtc.begin()) {
+    Serial.println("RTC TIDAK TERBACA");
+  }
+  if (! rtc.isrunning()) {
+    Serial.println("RTC is NOT running!");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));//update rtc dari waktu komputer
+  }
+  if (!SD.begin(53)) {
+    Serial.println("sd card gagal");
+  }
+  file = SD.open("OTOMATIS.txt", FILE_WRITE);
+  file.close();
+  file = SD.open("MANUAL.txt", FILE_WRITE);
+  file.close();
   myGLCD.InitLCD();
   myGLCD.clrScr();
   myTouch.InitTouch();
@@ -139,7 +164,7 @@ void setup() {
 }
 
 void loop() { 
-  DS18B20.requestTemperatures();
+  getTime();
   // Home Screen
   if (currentPage == "0") {
     if (myTouch.dataAvailable()) {
@@ -180,7 +205,8 @@ void loop() {
       printManual(); // calling function to display sens value
       kirim = "";
       if(statusKirimM == true){
-        kirimManual();
+        // kirimManual();
+        sendESP('M');
       }
     }
     if (myTouch.dataAvailable()) {
@@ -241,7 +267,8 @@ void loop() {
       getValueAll();
       kirim = "";
       if(statusKirim == true){
-        kirimOtomatis();
+        // kirimOtomatis();
+        sendESP('O');
       }
       if(millis() - millis3 > intervalOtomatis){ 
         otomatis = false;
@@ -260,7 +287,8 @@ void loop() {
           drawFrame(35, 90, 285, 130);
           otomatis = false;
           currentPage = "0";
-          kirimOtomatis();
+          // kirimOtomatis();
+          sendESP('O');
           myGLCD.clrScr();
           drawHomeScreen();
         }
@@ -1783,14 +1811,19 @@ void adcCal(){
 }
 
 void getTemp(){
+  DS18B20.requestTemperatures();
   suhuPanelC = suhuCel.read_temp();
   suhuPanelF = suhuFah.read_temp();
   suhuLingkunganC = DS18B20.getTempCByIndex(0);
   suhuLingkunganF = DS18B20.getTempFByIndex(0);
 }
 
-void kirimOtomatis(){
+void sendESP(char mode){
+  // mode = 'O' untuk Otomatis
+  // mode = 'M' untuk Manual
   kirim = "";
+  kirim += waktu;
+  kirim += ";";
   kirim += voltV;
   kirim += ";";
   kirim += arusA;
@@ -1801,24 +1834,40 @@ void kirimOtomatis(){
   kirim += ";";
   kirim += suhuLingkunganC;
   kirim += ";";
-  kirim += "110011";
+  if(mode == 'O'){
+    kirim += "110011";
+    file = SD.open("OTOMATIS.txt", FILE_WRITE);
+  }else if(mode == 'M'){
+    kirim += "101101";
+    file = SD.open("MANUAL.txt", FILE_WRITE);
+  }
   Serial3.println(kirim);
+  if(file){
+    file.println(kirim);
+    file.close();
+    Serial.print("Berhasil > ");
+    Serial.println(kirim);
+  }
   statusKirim = false;
-}
-
-void kirimManual(){
-  kirim = "";
-  kirim += voltV;
-  kirim += ";";
-  kirim += arusA;
-  kirim += ";";
-  kirim += LUX;
-  kirim += ";";
-  kirim += suhuPanelC;
-  kirim += ";";
-  kirim += suhuLingkunganC;
-  kirim += ";";
-  kirim += "101101";
-  Serial3.println(kirim);
   statusKirimM = false;
 }
+
+void getTime(){
+  DateTime now = rtc.now();
+  hari = namaHari[now.dayOfTheWeek()];
+  waktu = hari + ";" + now.day() + "/" + now.month() + "/" + now.year() + ";" + now.hour() + ":" + now.minute() + ":" + now.second();
+}
+// void kirimManual(){
+//   kirim = "";
+//   kirim += voltV;
+//   kirim += ";";
+//   kirim += arusA;
+//   kirim += ";";
+//   kirim += LUX;
+//   kirim += ";";
+//   kirim += suhuPanelC;
+//   kirim += ";";
+//   kirim += suhuLingkunganC;
+//   kirim += ";";
+//   Serial3.println(kirim);
+// }
