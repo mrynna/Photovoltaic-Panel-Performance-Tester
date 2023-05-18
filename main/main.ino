@@ -11,15 +11,36 @@
 #include <SPI.h>
 #include <SD.h>
 
-void backButton(String *, void (*)());
+void backButton(int, void (*)(), bool = true);
+void touchButton(int, int, int, int, int, void (*)(), int = 0, int = 1, int = 1, bool = false, bool = false, bool = false, bool = false, bool = true);
+void selectUnit(int, int, int, int, char, bool istemp = false);
+void drawHomeScreen();
 void drawMultimeter();
 void drawPerformance();
-void drawHomeScreen();
+void drawManual();
+void drawOtomatis();
+void drawOffline();
 void drawSetting();
+void SelectOption();
+void drawAdcCal();
+void drawArus();
+void drawTegangan();
+void drawDaya();
+void drawLux();
+void drawSuhu();
+void StopPengukuran();
 
 //=======================ESP Data Transfer=========================
 String kirim = "";
 bool otomatis, statusKirim = false, statusKirimM = false;
+
+//Upload Data
+int signal = 404;
+String msg = "";
+String line = "";
+int i = 0;
+bool uploadState = false;
+bool offlineState = false;
 //=================================================================
 
 //=======================RTC SD Card================================
@@ -49,12 +70,15 @@ int x, y;
 // Keypad
 char stCurrent[20]="";
 int stCurrentLen=0;
-char stLast1[20]="";
-char stLast2[20]="";
+String vocData = "";
+String iscData = "";
+char stLast1[20] = "";
+char stLast2[20] = "";
 
 // Menu
 String currentPage;
 char selectedUnit = '0',selectedUnitV = '0', selectedUnitW = '0', selectedUnitL = '0'; 
+bool fromMenu = true;
 
 // Time Slider
 const int valueSlider = 1;
@@ -77,8 +101,8 @@ Adafruit_ADS1115 ads; //
 
 //==========Voltage Divider===========
 long adc0 = 0.0;
-float R1 = 9752.0; //Resistor 1, 
-float R2 = 206000.0; //Resistor 2
+float R1 = 975.0; //Resistor 1, 
+float R2 = 203000.0; //Resistor 2
 float volts0, voc = 0.0, volt = 0.0; 
 //====================================
 
@@ -97,7 +121,7 @@ MAX6675 suhuFah(CSs,SOs,SCKs,2);
 //============================================
 
 //===============Suhu DS18B20==================
-OneWire pin_DS18B20(A0);
+OneWire pin_DS18B20(16);
 DallasTemperature DS18B20(&pin_DS18B20);
 //=============================================
 
@@ -113,13 +137,14 @@ byte fase = 0;
 
 
 // ========Lux Meter========
-int LUX;
+unsigned long LUX;
 BH1750 lightMeter;
 //==========================
 
 //======================================Data Variables===================================
-float arusA, arusmA, voltV, voltmV, lux, calLux, iradiasi, dayaW, dayamW, performa;
+float arusA, arusmA, voltV, voltmV, iradiasi, dayaW, dayamW, performa;
 float suhuPanelC, suhuPanelF, suhuLingkunganC, suhuLingkunganF;
+unsigned long lux, calLux;
 int adc = 13300, calValue;
 //=======================================================================================
 
@@ -148,6 +173,16 @@ void setup() {
   file.close();
   file = SD.open("MANUAL.txt", FILE_WRITE);
   file.close();
+  file = SD.open("SETTING.txt", FILE_READ);
+  if (file) {
+    String line = file.readStringUntil('\n');
+    file.close();
+    vocData = splitString(line, ';', 0);
+    iscData = splitString(line, ';', 1);
+    adc = splitString(line, ';', 2).toInt();
+  } else {
+    Serial.println("Gagal membuka file");
+  }
   myGLCD.InitLCD();
   myGLCD.clrScr();
   myTouch.InitTouch();
@@ -164,36 +199,29 @@ void setup() {
 }
 
 void loop() { 
-  getTime();
+  Serial.print("offlineState = ");
+  Serial.println(offlineState);
+  getTime(); // real time clock for data logger
+  calValue = ads.readADC_SingleEnded(1) - adc; // to get calValue value for calibration icon warning
   // Home Screen
   if (currentPage == "0") {
+    if(calValue == 0 || (calValue <= 265 && calValue >= (-2))){
+      myGLCD.setColor(12, 171, 182);
+      myGLCD.fillRect(240, 200, 275, 220);
+    }else{
+      warnCal(250, 202);
+    }
     if (myTouch.dataAvailable()) {
       myTouch.read();
       x=myTouch.getX(); // X coordinate where the screen has been pressed
       y=myTouch.getY(); // Y coordinates where the screen has been pressed
 
       // If we press the Performance Button 
-      if ((x>=35) && (x<=285) && (y>=90) && (y<=130)) {
-        drawFrame(35, 90, 285, 130);
-        currentPage = "10";
-        myGLCD.clrScr();
-        drawPerformance();
-      }
+      touchButton(35, 285, 90, 130, 10, drawPerformance);
       // If we press the Multimeter Button 
-      if ((x>=35) && (x<=285) && (y>=140) && (y<=180)) {
-        drawFrame(35, 140, 285, 180);
-        currentPage = "11";
-        fase = 0;
-        myGLCD.clrScr();
-        drawMultimeter();
-      }  
+      touchButton(35, 285, 140, 180, 11, drawMultimeter);
       // If we press Setting
-      if ((x>=35) && (x<=285) && (y>=190) && (y<=230)) {
-        drawFrame(35, 190, 285, 230);
-        currentPage = "3";
-        myGLCD.clrScr();
-        drawSetting();
-      }
+      touchButton(35, 285, 190, 230, 3, drawSetting);
     }
   }
 // MANUAL
@@ -213,7 +241,13 @@ void loop() {
       myTouch.read();
       x=myTouch.getX();
       y=myTouch.getY();
-      backButton("10", drawPerformance);
+
+      //Back button
+      if(offlineState == true){
+        backButton(18, drawPerformance, false);
+      }else{
+      backButton(10, drawPerformance);
+      }
     }
   }
   
@@ -224,37 +258,40 @@ void loop() {
         myTouch.read();
         x=myTouch.getX();
         y=myTouch.getY();
-              
-      //Back button
-      backButton("10", drawPerformance);
+
       // Mulai
-      if ((x>=100) && (x<=216) && (y>=180) && (y<=215)) {
-        drawFrame(100, 180, 216, 215); //drawframemulai
-        currentPage = "4";
-        myGLCD.clrScr();
-        StopPengukuran();
+      
+      //Back button
+      if(offlineState == true){
+        touchButton(100, 216, 180, 215, 4, StopPengukuran, 0, 1, 1, false, false, false, true, false); 
+        backButton(18, drawPerformance, false);
+        offlineState == true;
+      }else{
+        backButton(10, drawPerformance);
+        touchButton(100, 216, 180, 215, 4, StopPengukuran);
       }
     }
   }
   // Setting
   if (currentPage =="3") {
+    uploadState = false;
+    if(calValue == 0 || (calValue <= 265 && calValue >= (-2))){
+      myGLCD.setColor(12, 171, 182);
+      myGLCD.fillRect(240, 145, 275, 165);
+    }else{
+      warnCal(250, 150);
+    }
     if (myTouch.dataAvailable()) {
       myTouch.read();
       x=myTouch.getX();
       y=myTouch.getY();
-      backButton("0", drawHomeScreen);
-      if ((x>=30) && (x<=290) && (y>=90) && (y<=130)) {
-        drawFrame(30, 90, 290, 130);
-        currentPage = "7";
-        myGLCD.clrScr();
-        SelectOption();
-      }
-      if ((x>=30) && (x<=290) && (y>=140) && (y<=180)) {
-        drawFrame(30, 140, 290, 180);
-        currentPage = "5";
-        myGLCD.clrScr();
-        drawAdcCal();
-      }
+      backButton(0, drawHomeScreen);
+      // input data panel
+      touchButton(30, 290, 90, 130, 7, SelectOption);
+      //Kalibrasi
+      touchButton(30, 290, 140, 180, 5, drawAdcCal);
+      //Upload data
+      touchButton(30, 290, 190, 230, 6, drawUploadData, 0, 1, 1, false, true);
     }    
   }
   // Hal otomatis mengukur
@@ -287,7 +324,6 @@ void loop() {
           drawFrame(35, 90, 285, 130);
           otomatis = false;
           currentPage = "0";
-          // kirimOtomatis();
           sendESP('O');
           myGLCD.clrScr();
           drawHomeScreen();
@@ -305,48 +341,47 @@ void loop() {
       x=myTouch.getX();
       y=myTouch.getY();
       //Back button  
-      backButton("3", drawSetting);
+      backButton(3, drawSetting);
       // if we press simpan
-      if ((x>=100) && (x<=216) && (y>=180) && (y<=215)) {
-        drawFrame(100, 180, 216, 215); //drawframesimpan
-        currentPage = "3";
-        digitalWrite(relay2, HIGH);
-        myGLCD.clrScr();
-        drawSetting();
-      }
+      touchButton(100, 216, 180, 215, 3, drawSetting, 0, 1, 1, true);
     }
   }
+
+  //Menu Upload Data
   if (currentPage == "6") {
+    if (uploadState == true){
+      uploadData();
+    }
+    if (myTouch.dataAvailable()) {
+      myTouch.read();
+      x=myTouch.getX();
+      y=myTouch.getY();
+      //Stop Button
+      touchButton(35, 285, 140, 180, 3, drawSetting, 0, 1, 1, false, false);
+    }
+  }
+
+  //Menu Selesai Upload Data
+  if (currentPage == "17") {
     if (myTouch.dataAvailable()) {
       myTouch.read();
       x=myTouch.getX();
       y=myTouch.getY();
       //Back button
-      backButton("0", drawHomeScreen);
+      backButton(3, drawSetting);
+      //Stop Button
+      touchButton(35, 285, 140, 180, 3, drawSetting, 0, 1, 1, false, false, true);
     }
   }
+
   if (currentPage == "7") {
     if (myTouch.dataAvailable()) {
       myTouch.read();
       x=myTouch.getX();
       y=myTouch.getY();
-
-      if ((x>=250) && (x<=290) && (y>=120) && (y<=140)) {
-        drawFrame(250, 120, 290, 140);
-        currentPage = "8";
-        myGLCD.clrScr();
-        myGLCD.setBackColor(12, 171, 182);
-        drawButtons();  
-      }
-    
-      if ((x>=250) && (x<=290) && (y>=190) && (y<=210)) {
-        drawFrame(250, 190, 290, 210);
-        currentPage = "9";
-        myGLCD.clrScr();
-        myGLCD.setBackColor(12, 171, 182);
-        drawButtons();  
-      }
-      backButton("3", drawSetting);
+      touchButton(250, 290, 120, 140, 8, drawButtons);
+      touchButton(250, 290, 120, 140, 9, drawButtons);
+      backButton(3, drawSetting);
     }
   }
   if (currentPage == "8") {
@@ -440,6 +475,8 @@ void loop() {
             }
             stCurrent[0]='\0';
             stCurrentLen=0;
+            vocData = String(stLast1);
+            saveSetting();
             myGLCD.setColor(0, 0, 0);
             myGLCD.fillRect(0, 5, 245, 25);
             myGLCD.setColor(0, 255, 0);
@@ -464,13 +501,7 @@ void loop() {
           }
         }
       }
-      if ((x>=250) && (x<=300) &&(y>=10) && (y<=60)) {
-        drawFrame(250, 10, 300, 36);
-        currentPage = "7";
-        myGLCD.clrScr();
-        SelectOption();
-         
-      }
+      touchButton(250, 300, 10, 60, 7, SelectOption);
     }
   }
   if (currentPage == "9") {
@@ -563,6 +594,8 @@ void loop() {
             }
             stCurrent[0]='\0';
             stCurrentLen=0;
+            iscData = String(stLast2);
+            saveSetting();
             myGLCD.setColor(0, 0, 0);
             myGLCD.fillRect(0, 5, 245, 25);
             myGLCD.setColor(0, 255, 0);
@@ -586,13 +619,7 @@ void loop() {
           }
         }
       }
-
-      if ((x>=250) && (x<=300) &&(y>=10) && (y<=60)) {
-        drawFrame(250, 10, 300, 36);
-        currentPage = "7";
-        myGLCD.clrScr();
-        SelectOption();
-      }
+      touchButton(250, 300, 10, 60, 7, SelectOption);
     }
   }
 
@@ -603,20 +630,13 @@ void loop() {
       x=myTouch.getX();
       y=myTouch.getY();
       // If we press the Manual Button 
-      if ((x>=35) && (x<=285) && (y>=90) && (y<=130)) {
-        drawFrame(35, 90, 285, 130);
-        currentPage = "1"; 
-        myGLCD.clrScr(); 
-        drawManual(); 
-      }
+      touchButton(35, 285, 80, 120, 1, drawManual, 0, 1, 1, false, false, false, false);
       // If we press the Otomatis Button 
-      if ((x>=35) && (x<=285) && (y>=140) && (y<=180)) {
-        drawFrame(35, 140, 285, 180);
-        currentPage = "2";
-        myGLCD.clrScr();
-        drawOtomatis();
-      }
-      backButton("0", drawHomeScreen);
+      touchButton(35, 285, 130, 170, 2, drawOtomatis, 0, 1, 1, false, false, false, false);
+      // If we press the Offline Mode button 
+      touchButton(35, 285, 180, 220, 18, drawPerformance, 0, 1, 1, false, false, false, false, false);
+      // Back Button
+      backButton(0, drawHomeScreen);
     }
   }
   // Multimeter
@@ -630,41 +650,17 @@ void loop() {
       y=myTouch.getY();
       
       // If we press Arus
-      if ((x>=5) && (x<=57) &&(y>=70) && (y<=100)) {
-        drawFrame(5, 70, 57, 100);
-        currentPage = "12";
-        myGLCD.clrScr();
-        drawArus(); // Draws the Arus Menu
-      }
+      touchButton(5, 57, 70, 100, 12, drawArus, 0, 1, 0);
         // If we press Tegangan
-      if ((x>=62) && (x<=134) &&(y>=70) && (y<=100)) {
-        drawFrame(62, 70, 134, 100);
-        currentPage = "13"; 
-        myGLCD.clrScr();
-        drawTegangan(); // Draws the Tegangan Menu
-      }
-          // If we press Daya
-      if ((x>=139) && (x<=212) &&(y>=70) && (y<=100)) {
-        drawFrame(139, 70, 212, 100);
-        currentPage = "14";
-        myGLCD.clrScr();
-        drawDaya(); // Draws the daya Menu
-      }
-        // If we press Lux
-      if ((x>=217) && (x<=270) &&(y>=70) && (y<=100)) {
-        drawFrame(217, 70, 270, 100);
-        currentPage = "15";
-        myGLCD.clrScr();
-        drawLux(); // Draws the Lux Menu
-      }
+      touchButton(62, 134, 70, 100, 13, drawTegangan, 0, 0, 1);
+      // If we press Daya
+      touchButton(139, 212, 70, 100, 14, drawDaya, 0, 1, 0);
+      // If we press Lux
+      touchButton(217, 270, 70, 100, 15, drawLux, 0, 1, 0);
       // If we press Suhu
-      if ((x>=275) && (x<=315) &&(y>=70) && (y<=100)) {
-        drawFrame(275, 70, 315, 100);
-        currentPage = "16";
-        myGLCD.clrScr();
-        drawSuhu(); // Draws the Suhu Menu
-      }
-      backButton("0", drawHomeScreen);
+      touchButton(275, 315, 70, 100, 16, drawSuhu, 0, 1, 0);
+      //Back Button
+      backButton(0, drawHomeScreen);
     }
   }
   //Multiimeter Arus
@@ -672,28 +668,16 @@ void loop() {
     digitalWrite(relay1,HIGH);
     digitalWrite(relay2,LOW);
     getArus(); 
-    Serial.println(adc1);
-    Serial.println(arusA);
     if (myTouch.dataAvailable()) {
       myTouch.read();
       x=myTouch.getX();
       y=myTouch.getY();
       
       // If we press A
-      if ((x>=10) && (x<=90) &&(y>=135) && (y<=163)) {
-        drawFrame(10, 135, 90, 163);          
-        selectedUnit = '0';
-        myGLCD.setColor(0, 0, 0);
-        myGLCD.fillRect(110, 140, 310, 210);
-      }
+      selectUnit(10, 90, 135, 163, '0');
       // If we press mA
-      if ((x>=10) && (x<=90) &&(y>=173) && (y<=201)) {
-        drawFrame(10, 173, 90, 201);
-        selectedUnit = '1';
-        myGLCD.setColor(0, 0, 0);
-        myGLCD.fillRect(110, 140, 310, 210);
-      }
-      backButton("11", drawMultimeter);
+      selectUnit(10, 90, 173, 201, '1');
+      backButton(11, drawMultimeter);
     }
   }
   //Multiimeter Tegangan
@@ -707,21 +691,11 @@ void loop() {
       y=myTouch.getY();
       
       // If we press V
-      if ((x>=10) && (x<=90) &&(y>=135) && (y<=163)) {
-        drawFrame(10, 135, 90, 163);
-        selectedUnitV = '0';
-          myGLCD.setColor(0, 0, 0);
-        myGLCD.fillRect(110, 140, 310, 210);
-      }
+      selectUnit(10, 90, 135, 163, '0');
       // If we press mV
-      if ((x>=10) && (x<=90) &&(y>=173) && (y<=201)) {
-          drawFrame(10, 173, 90, 201);
-        selectedUnitV = '1';
-          myGLCD.setColor(0, 0, 0);
-        myGLCD.fillRect(110, 140, 310, 210);
-      }
+      selectUnit(10, 90, 173, 201, '1');
       // If we press the Back Button
-      backButton("11", drawMultimeter);
+      backButton(11, drawMultimeter);
     }
   }
   //Multiimeter Daya
@@ -735,22 +709,11 @@ void loop() {
       y=myTouch.getY();
       
       // If we press W
-      if ((x>=10) && (x<=90) &&(y>=135) && (y<=163)) {
-        drawFrame(10, 135, 90, 163);
-        selectedUnitW = '0';
-          myGLCD.setColor(0, 0, 0);
-        myGLCD.fillRect(110, 140, 310, 210);
-          
-      }
+      selectUnit(10, 90, 135, 163, '0');
       // If we press mW
-      if ((x>=10) && (x<=90) &&(y>=173) && (y<=201)) {
-          drawFrame(10, 173, 90, 201);
-        selectedUnitW = '1';
-          myGLCD.setColor(0, 0, 0);
-        myGLCD.fillRect(110, 140, 310, 210);
-      }
+      selectUnit(10, 90, 173, 201, '1');
       // If we press the Back Button
-      backButton("11", drawMultimeter);
+      backButton(11, drawMultimeter);
     }
   }
   //Multiimeter Lux
@@ -762,22 +725,11 @@ void loop() {
       y=myTouch.getY();
       
       // If we press lux
-      if ((x>=10) && (x<=90) &&(y>=135) && (y<=163)) {
-        drawFrame(10, 135, 90, 163);
-        selectedUnitL = '0';
-        myGLCD.setColor(0, 0, 0);
-        myGLCD.fillRect(110, 140, 315, 230);
-          
-      }
+      selectUnit(10, 90, 135, 163, '0');
       // If we press w/m2
-      if ((x>=10) && (x<=90) &&(y>=173) && (y<=201)) {
-        drawFrame(10, 173, 90, 201);
-        selectedUnitL = '1';
-        myGLCD.setColor(0, 0, 0);
-        myGLCD.fillRect(110, 140, 315, 230);
-      }
+      selectUnit(10, 90, 173, 201, '1');
       // If we press the Back Button
-      backButton("11", drawMultimeter);
+      backButton(11, drawMultimeter);
     }
   }
   //Multiimeter Suhu
@@ -789,24 +741,24 @@ void loop() {
       y=myTouch.getY();
       
       // If we press C
-      if ((x>=10) && (x<=90) &&(y>=135) && (y<=163)) {
-        drawFrame(10, 135, 90, 163);
-        selectedUnitL = '0';
-        myGLCD.setColor(0, 0, 0);
-        myGLCD.fillRect(118, 135, 315, 162);
-        myGLCD.fillRect(118, 183, 315, 220);
-          
-      }
+      selectUnit(10, 90, 135, 163, '0', true);
       // If we press F
-      if ((x>=10) && (x<=90) &&(y>=173) && (y<=201)) {
-        drawFrame(10, 173, 90, 201);
-        selectedUnitL = '1';
-        myGLCD.setColor(0, 0, 0);
-        myGLCD.fillRect(118, 135, 315, 162);
-        myGLCD.fillRect(118, 183, 315, 220);
-      }
+      selectUnit(10, 90, 173, 201, '1', true);
       // If we press the Back Button
-      backButton("11", drawMultimeter);
+      backButton(11, drawMultimeter);
+    }
+  }
+  if (currentPage == "18") {    
+    if (myTouch.dataAvailable()) {
+      myTouch.read();
+      x=myTouch.getX();
+      y=myTouch.getY();
+      // If we press the Manual Button 
+      touchButton(35, 285, 80, 120, 1, drawManual, 0, 1, 1, false, false, false, true);
+      // If we press the Otomatis Button 
+      touchButton(35, 285, 130, 170, 2, drawOtomatis, 0, 1, 1, false, false, false, true);
+      // Back Button
+      backButton(10, drawPerformance);
     }
   }
 }
@@ -882,27 +834,40 @@ void drawPerformance() {
   myGLCD.setFont(BigFont);
   myGLCD.setBackColor(100, 155, 203);
   myGLCD.print("<-", 18, 15);
-  myGLCD.setBackColor(0, 0, 0);
-  myGLCD.setFont(SmallFont);
-  myGLCD.print("Back to Main Menu", 70, 18);
   
   // Button - Manual 
   myGLCD.setColor(12, 171, 182);
-  myGLCD.fillRoundRect (35, 90, 285, 130);
+  myGLCD.fillRoundRect (35, 80, 285, 120);
   myGLCD.setColor(255, 255, 255);
-  myGLCD.drawRoundRect (35, 90, 285, 130);
+  myGLCD.drawRoundRect (35, 80, 285, 120);
   myGLCD.setFont(BigFont);
   myGLCD.setBackColor(12, 171, 182);
-  myGLCD.print("MANUAL", CENTER, 102);
+  myGLCD.print("MANUAL", CENTER, 92);
   
   // Button - Otomatis
   myGLCD.setColor(12, 171, 182);
-  myGLCD.fillRoundRect (35, 140, 285, 180);
+  myGLCD.fillRoundRect (35, 130, 285, 170);
   myGLCD.setColor(255, 255, 255);
-  myGLCD.drawRoundRect (35, 140, 285, 180);
-  myGLCD.setFont(BigFont);
-  myGLCD.setBackColor(12, 171, 182);
-  myGLCD.print("OTOMATIS", CENTER, 152);
+  myGLCD.drawRoundRect (35, 130, 285, 170);
+  myGLCD.print("OTOMATIS", CENTER, 142);
+  
+  // Button - Offline Mode
+  if(fromMenu == true){
+    myGLCD.setColor(12, 171, 182);
+    myGLCD.fillRoundRect (35, 180, 285, 220);
+    myGLCD.setColor(255, 255, 255);
+    myGLCD.drawRoundRect (35, 180, 285, 220);
+    myGLCD.print("MODE OFFLINE", CENTER, 192);
+    myGLCD.setBackColor(0, 0, 0);
+    myGLCD.setColor(255, 255, 255);
+    myGLCD.setFont(SmallFont);
+    myGLCD.print("Back to Main Menu", 70, 18);
+  }else{
+    myGLCD.setBackColor(0, 0, 0);
+    myGLCD.setColor(255, 255, 255);
+    myGLCD.setFont(SmallFont);
+    myGLCD.print("Back to Performance Menu", 70, 18);
+  }
 }
 
 // Menu Manual ======================================================================================
@@ -996,9 +961,12 @@ void drawSetting(){
   myGLCD.fillRoundRect (30, 140, 290, 180);
   myGLCD.setColor(255, 255, 255);
   myGLCD.drawRoundRect (30, 140, 290, 180);
-  myGLCD.setFont(BigFont);
-  myGLCD.setBackColor(12, 171, 182);
   myGLCD.print("Kalibrasi", CENTER, 150);
+  myGLCD.setColor(12, 171, 182);
+  myGLCD.fillRoundRect (30, 190, 290, 230);
+  myGLCD.setColor(255, 255, 255);
+  myGLCD.drawRoundRect (30, 190, 290, 230);
+  myGLCD.print("Upload Data", CENTER, 200);
 }
 
 // Slider Waktu Otomatis ================================================================================
@@ -1045,6 +1013,48 @@ void StopPengukuran(){
   myGLCD.print("STOP PENGUKURAN", CENTER, 102); 
 }
 
+void drawUploadData(){
+  myGLCD.setFont(BigFont); 
+  myGLCD.setColor(255, 255, 255); 
+  myGLCD.setBackColor(0, 0, 0); 
+  myGLCD.print("MENGUPLOAD DATA", CENTER, 105);
+  myGLCD.setColor(12, 171, 182); 
+  myGLCD.fillRoundRect (35, 130, 285, 170); 
+  myGLCD.setColor(255, 255, 255); 
+  myGLCD.drawRoundRect (35, 130, 285, 170); 
+  myGLCD.setBackColor(12, 171, 182); 
+  myGLCD.print("STOP UPLOAD", CENTER, 140); 
+}
+
+void drawWaitUpload(){
+  myGLCD.setFont(BigFont); 
+  myGLCD.setColor(255, 255, 255); 
+  myGLCD.setBackColor(0, 0, 0); 
+  myGLCD.print("MEMBATALKAN ...", CENTER, 110);
+}
+
+void drawDoneUpload(){
+  myGLCD.setColor(100, 155, 203);
+  myGLCD.fillRoundRect (10, 10, 60, 36);
+  myGLCD.setColor(255, 255, 255);
+  myGLCD.drawRoundRect (10, 10, 60, 36);
+  myGLCD.setFont(BigFont);
+  myGLCD.setBackColor(100, 155, 203);
+  myGLCD.print("<-", 18, 15);
+  myGLCD.setFont(BigFont); 
+  myGLCD.setColor(255, 255, 255); 
+  myGLCD.setBackColor(0, 0, 0); 
+  myGLCD.print("DATA TELAH", CENTER, 90);
+  myGLCD.print("TERUPLOAD", CENTER, 115);
+  myGLCD.setFont(SmallFont); 
+  myGLCD.setColor(12, 171, 182); 
+  myGLCD.fillRoundRect (35, 140, 285, 170); 
+  myGLCD.setColor(255, 255, 255); 
+  myGLCD.drawRoundRect (35, 140, 285, 170); 
+  myGLCD.setBackColor(12, 171, 182); 
+  myGLCD.print("SELESAI (HAPUS DATA)", CENTER, 150); 
+}
+
 // Menu Input Data Panel ====================================================
 void SelectOption(){
   myGLCD.setColor(100, 155, 203);
@@ -1067,11 +1077,11 @@ void SelectOption(){
   myGLCD.setFont(BigFont);
   myGLCD.print("TEGANGAN", 10, 90);
   myGLCD.print("Voc   :", 10, 120);
-  myGLCD.print(stLast1, 130, 120);
+  myGLCD.print(vocData, 130, 120);
   myGLCD.print("V", 220, 120);
   myGLCD.print("ARUS", 10, 160);
   myGLCD.print("Isc   :", 10,190);
-  myGLCD.print(stLast2, 130, 190);
+  myGLCD.print(iscData, 130, 190);
   myGLCD.print("A", 220, 190);
   
   myGLCD.setFont(SmallFont);
@@ -1151,11 +1161,14 @@ void drawMultimeter() {
   myGLCD.setBackColor(0, 0, 0);
   myGLCD.setColor(255, 255, 255);
   myGLCD.setFont(SmallFont);
-  myGLCD.print("Arus (I)      :", 10, 120);
-  myGLCD.print("Tegangan (V)  :", 10, 145);
-  myGLCD.print("Daya (W)      :", 10, 170);
-  myGLCD.print("I.Cahaya (Lux):", 10, 195);
-  myGLCD.print("S.Lingkungan  :", 10, 220);
+  myGLCD.print("Arus (I)      :", 10, 125);
+  myGLCD.print("Tegangan (V)  :", 10, 155);
+  myGLCD.print("Daya (P)      :", 10, 185);
+  myGLCD.print("I.Cahaya (Lux):", 10, 215);
+  myGLCD.print("A", 295, 125);
+  myGLCD.print("V", 295, 155);
+  myGLCD.print("W", 295, 185);
+  myGLCD.print("Lux", 290, 215);
 }
 // ========================================================================================================
 
@@ -1199,6 +1212,7 @@ void waitForIt(int x1, int y1, int x2, int y2)
 }
 
 void drawButtons(){
+   myGLCD.setBackColor(12, 171, 182);
    myGLCD.setColor(12, 171, 182);
    myGLCD.fillRoundRect (250, 10, 300, 36);
    myGLCD.setColor(255, 255, 255);
@@ -1496,37 +1510,24 @@ void drawAdcCal() {
 
 void getNilaiMulti(){ // Get Sens Value for Multimeter
   arusA = getCurrent(1, adc);
-  Serial.println(adc);
   voltV = getVoltage(0);
   if(voltV < 0){
     voltV *= -1;
   }
   LUX = getLuxVal();
   dayaW = getWatt(voltV, arusA);
-  getTemp();
   
-  myGLCD.setFont(SmallFont);
+  myGLCD.setFont(BigFont);
   myGLCD.setColor(0, 255, 0);
   myGLCD.setBackColor(0, 0, 0);
-  myGLCD.printNumF(arusA ,2 ,135, 120, '.', 6);
-  myGLCD.printNumF(voltV ,2 ,135, 145, '.', 6);
-  myGLCD.printNumF(dayaW ,2 ,135, 170, '.', 6);
-  myGLCD.printNumI(LUX ,135, 195, 6);
-  myGLCD.printNumF(suhuLingkunganC ,2, 135, 220,'.', 6);
-  myGLCD.print("/", 185, 220);
-  myGLCD.printNumF(suhuLingkunganF ,2, 190, 220,'.', 7);
-  myGLCD.setColor(255, 255, 255);
-  myGLCD.print("A", 265, 120);
-  myGLCD.print("V", 265, 145);
-  myGLCD.print("W", 265, 170);
-  myGLCD.print("Lux", 260, 195);
-  myGLCD.print("C/F", 260, 220);
+  myGLCD.printNumF(arusA ,2 ,155, 125, '.', 6);
+  myGLCD.printNumF(voltV ,2 ,155, 155, '.', 6);
+  myGLCD.printNumF(dayaW ,2 ,155, 185, '.', 6);
+  myGLCD.printNumI(LUX ,155, 215, 6);
 }
 
 void getArus() {
   arusA = getCurrent(1, adc);
-  Serial.println(adc);
-  Serial.print(arusA);
   arusmA= arusA*1000.0;
   // Prints the value in A
   if (selectedUnit == '0') {
@@ -1560,7 +1561,7 @@ void getTegangan() {
     myGLCD.setFont(SevenSegmentFull);
     myGLCD.setColor(0, 255, 0);
     myGLCD.setBackColor(0, 0, 0);
-    myGLCD.printNumF(voltV, 2 ,110, 145);
+    myGLCD.printNumF(voltV, 2 ,110, 145, '.', 5);
     myGLCD.setFont(BigFont);
     myGLCD.print(" V", 285, 178);
     }
@@ -1600,6 +1601,9 @@ void getDaya() {
 }
 
 void getLux() {
+  Serial.print(lux);
+  Serial.print(" | ");
+  Serial.println(LUX);
   LUX = getLuxVal();
   iradiasi = LUX*0.0079;
   
@@ -1608,7 +1612,8 @@ void getLux() {
     myGLCD.setFont(SixteenSegment16x24);
     myGLCD.setColor(0, 255, 0);
     myGLCD.setBackColor(0, 0, 0);
-    myGLCD.printNumI(LUX ,120, 155);
+    myGLCD.printNumI(LUX, 125, 155, 7);
+    myGLCD.printNumI(lux, 125, 190, 7);
     myGLCD.setFont(BigFont);
     myGLCD.print("lux", 255, 165);
   }
@@ -1617,7 +1622,7 @@ void getLux() {
     myGLCD.setFont(SixteenSegment16x24);
     myGLCD.setColor(0, 255, 0);
     myGLCD.setBackColor(0, 0, 0);
-    myGLCD.printNumF(iradiasi ,2 ,120, 155);
+    myGLCD.printNumF(iradiasi ,2 ,120, 155, '.', 4);
     myGLCD.setFont(BigFont);
     myGLCD.print("W/M2", 255, 165);
   } 
@@ -1657,28 +1662,85 @@ void drawFrame(int x1, int y1, int x2, int y2) {
     myGLCD.drawRoundRect (x1, y1, x2, y2);
 }
 
-void backButton(String currentpage, void(*function)()){
+// Tombol Back
+void backButton(int page, void(*function)(), bool frommenu = true){
+  fromMenu = frommenu;
   if ((x>=10) && (x<=60) &&(y>=10) && (y<=60)) {
     drawFrame(10, 10, 60, 36);
+    uploadState = false;
     otomatis = false;
-    currentPage = currentpage;
+    currentPage = String(page);
     myGLCD.clrScr();
     (*function)();
   }
 }
+
+void touchButton(int x1, int x2, int y1, int y2, int page, void(*function)(), int fase = 0, int relay1State = 1, int relay2State = 1, bool savesetting = false, bool upload = false, bool delData = false, bool offlinestate = false, bool frommenu = true){
+  fromMenu = frommenu;
+  offlineState = offlinestate;
+  uploadState = upload;
+  if ((x>=x1) && (x<=x2) &&(y>=y1) && (y<=y2)) {
+    drawFrame(x1, y1, x2, y2);
+    currentPage = String(page);
+    digitalWrite(relay1, relay1State);
+    digitalWrite(relay2, relay2State);
+    if(savesetting == true){
+      saveSetting();
+    }else{}
+    if(delData == true){
+      file = SD.open("OFFLINE.txt", FILE_WRITE | O_TRUNC); // Menghapus isi file txt
+      file.close(); // Menutup file txt
+    }else{}
+    myGLCD.clrScr();
+    (*function)();
+  }
+}
+
+void selectUnit(int x1, int x2, int y1, int y2, char selectedunit, bool istemp = false){
+  if ((x>=x1) && (x<=x2) &&(y>=y1) && (y<=y2)) {
+    drawFrame(x1, y1, x2, y2);
+    selectedUnit = selectedunit;
+    selectedUnitW = selectedunit;
+    selectedUnitV = selectedunit;
+    selectedUnitL = selectedunit;
+    myGLCD.setColor(0, 0, 0);
+    if (istemp == true){
+      myGLCD.fillRect(118, 135, 315, 162);
+      myGLCD.fillRect(118, 183, 315, 220);
+    }else{
+      myGLCD.fillRect(110, 140, 310, 210);
+    }
+  }
+}
+
+// Icon peringatan kalibrasi
+void warnCal(int xPlace, int yPlace){
+  myGLCD.setBackColor(VGA_TRANSPARENT);
+  myGLCD.setColor(VGA_YELLOW);
+  myGLCD.setFont(BigFont);
+  myGLCD.print("!!", xPlace, yPlace);
+  myGLCD.setColor(VGA_TRANSPARENT);
+  myGLCD.print("  ", xPlace, yPlace);
+  myGLCD.print("  ", xPlace, yPlace);
+  myGLCD.print("  ", xPlace, yPlace);
+  myGLCD.print("  ", xPlace, yPlace);
+  myGLCD.setColor(255, 0, 0);
+  myGLCD.print("!!", xPlace, yPlace);
+}
+
 //==============================================================================================================================
 
 //============================================ Mendapatkan nilai dari sensor =================================================== 
 float getCurrent(int inputPin, int adc){
   current = 0.0;
-  for(int i = 0; i < 10; i++){
-    adc1 = ads.readADC_SingleEnded(inputPin) - adc; // read ADC from inputPin of ADS1115
-    current += ads.computeVolts(adc1) * 100; // convert ADS1115 ADC to Voltage, 10 (ACS758 200B sensitivity) equals to 100 multiplier
-    delay(1);
-  }
-  //  volts1 = ads.computeVolts(adc1); // convert ADS1115 A0 ADC to Voltage
-  current /= 10;
-  //  current2 = (volts1 - 2.5) * 100; // convert Voltage (volts variable) to Current
+  // for(int i = 0; i < 10; i++){
+  adc1 = ads.readADC_SingleEnded(inputPin) - adc; // read ADC from inputPin of ADS1115
+  //   current += ads.computeVolts(adc1) * 100; // convert ADS1115 ADC to Voltage, 10 (ACS758 200B sensitivity) equals to 100 multiplier
+  //   delay(1);
+  // }
+  current = ads.computeVolts(adc1) * 100; // convert ADS1115 A0 ADC to Voltage
+  // current /= 10;
+  // current = (volts1 - 2.5) * 100; // convert Voltage (volts variable) to Current
   if (current < 0){
     current = 0; // If current value < 0, make current = 0
   }else{
@@ -1688,35 +1750,55 @@ float getCurrent(int inputPin, int adc){
 }
 
 float getVoltage(int inputPin){
-   volts0 = 0; // reset volts0 value
-   // Make samples 10x, and take the average
-   for (int i = 0; i < 10; i++){
-      adc0 = ads.readADC_SingleEnded(inputPin); // read ADC from inputPin of ADS1115
-      volts0 += ads.computeVolts(adc0); // convert ADS1115 ADC to Voltage
-      delay(1);
-   }
-   volts0 /= 10; // Take average from above samples
-   voc = ((R1 + R2)/R1) * volts0; // convert volts0 (input Voltage) to actual Voltage (VCC)
-   if(voc < 0.05){
-      voc = 0; // if voc < 0.05, make voc = 0
-   }else{
-      // do nothing
-   }
+  volts0 = 0; // reset volts0 value
+  // Make samples 10x, and take the average
+  for (int i = 0; i < 10; i++){
+    adc0 = ads.readADC_SingleEnded(inputPin); // read ADC from inputPin of ADS1115
+    volts0 += ads.computeVolts(adc0); // convert ADS1115 ADC to Voltage
+    delay(1);
+  }
+  volts0 /= 10; // Take average from above samples
+  voc = ((R1 + R2)/R1) * volts0; // convert volts0 (input Voltage) to actual Voltage (VCC)
+  if(voc < 0.05){
+    voc = 0; // if voc < 0.05, make voc = 0
+  }else{
+    // do nothing
+  }
+  voc -= 1.06;
   return voc;
 }
 
-int getLuxVal(){
+unsigned long getLuxVal(){
   lux = lightMeter.readLightLevel();
   if (lux < 20.0){
-    calLux = lux * 3.72;
-  }else if(lux >= 20.0 && lux <= 50){
+    calLux = lux * 3.2;
+  }else if(lux >= 20.0 && lux < 50.0){
     calLux = lux * 3.53;
-  }else if(lux > 50.0 && lux < 120){
-    calLux = lux * 3.3;
-  }else if(lux >= 120.0){
+  }else if(lux >= 50.0 && lux < 120.0){
+    calLux = lux * 3.1428;
+  }else if(lux >= 120.0 && lux < 1000.0){
     calLux = lux * 3.12;
-  }
-  else{
+  }else if(lux >= 1000.0 && lux < 2000.0){
+    calLux = lux * 3.02;
+  }else if(lux >= 2000.0 && lux < 3000.0){
+    calLux = lux * 3.18;
+  }else if(lux >= 3000.0 && lux < 4000.0){
+    calLux = lux * 3.31;
+  }else if(lux >= 4000.0 && lux < 5000.0){
+    calLux = lux * 3.47;
+  }else if(lux >= 5000.0 && lux < 10000.0){
+    calLux = lux * 3.54;
+  }else if(lux >= 10000.0 && lux < 20000.0){
+    calLux = lux * 3.77;
+  }else if(lux >= 20000.0 && lux < 30000.0){
+    calLux = lux * 4.19;
+  }else if(lux >= 30000.0 && lux < 32000.0){
+    calLux = lux * 4.4;
+  }else if(lux >= 32000.0 && lux < 34000.0){
+    calLux = lux * 4.54;
+  }else if(lux >= 34000.0){
+    calLux = lux * 4.62;
+  }else{
     calLux = lux;
   }
   return calLux;
@@ -1732,7 +1814,7 @@ void getValueAll(){
   getTemp();
   LUX = getLuxVal();
   iradiasi = LUX * 0.0079;
-  performa = getPerformance(voltV, arusA, atof(stLast1), atof(stLast2));
+  performa = getPerformance(voltV, arusA, vocData.toFloat(), iscData.toFloat());
 }
 
 void getRelayVA() {
@@ -1797,10 +1879,22 @@ float getPerformance(float voc, float isc, float vocNamePlate, float iscNamePlat
 
 void adcCal(){
   calValue = ads.readADC_SingleEnded(1) - adc;
-  if(calValue < 0){
+  if(calValue >= (-100) && calValue < 0){
     adc--;
-  }else if(calValue > 0){
+  }else if(calValue >= (-300) && calValue < (-100)){
+    adc-= 100;
+  }else if(calValue >= (-1000) && calValue < (-300)){
+    adc-= 300;
+  }else if(calValue < (-1000)){
+    adc-= 900;
+  }else if(calValue > 0 && calValue <= 100){
     adc++;
+  }else if(calValue > 100 && calValue <= 800){
+    adc+= 200;
+  }else if(calValue > 800 && calValue <= 1500){
+    adc+= 500;
+  }else if(calValue > 1500){
+    adc+= 1000;
   }else{
     myGLCD.print("TERKALIBRASI", CENTER, 135);
   }
@@ -1818,6 +1912,42 @@ void getTemp(){
   suhuLingkunganF = DS18B20.getTempFByIndex(0);
 }
 
+
+void getTime(){
+  DateTime now = rtc.now();
+  hari = namaHari[now.dayOfTheWeek()];
+  waktu = hari + ";" + now.day() + "/" + now.month() + "/" + now.year() + ";" + now.hour() + ":" + now.minute() + ":" + now.second();
+}
+
+String splitString(String data, char separator, int index)
+{
+    int found = 0;
+    int strIndex[] = { 0, -1 };
+    int maxIndex = data.length() - 1;
+
+    for (int i = 0; i <= maxIndex && found <= index; i++) {
+        if (data.charAt(i) == separator || i == maxIndex) {
+            found++;
+            strIndex[0] = strIndex[1] + 1;
+            strIndex[1] = (i == maxIndex) ? i+1 : i;
+        }
+    }
+    return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
+}
+
+void saveSetting(){
+  file = SD.open("SETTING.txt", FILE_WRITE | O_TRUNC);
+    if(file){
+      String simpanData = vocData + ";" + iscData + ";" + adc;
+      file.print(simpanData);
+      file.close();
+      // Serial.print("Berhasil > ");
+      // Serial.println(simpanData);
+    }else{
+      // Serial.print("Gagal membuka file")
+    }
+}
+
 void sendESP(char mode){
   // mode = 'O' untuk Otomatis
   // mode = 'M' untuk Manual
@@ -1833,41 +1963,92 @@ void sendESP(char mode){
   kirim += suhuPanelC;
   kirim += ";";
   kirim += suhuLingkunganC;
-  kirim += ";";
-  if(mode == 'O'){
-    kirim += "110011";
-    file = SD.open("OTOMATIS.txt", FILE_WRITE);
-  }else if(mode == 'M'){
-    kirim += "101101";
-    file = SD.open("MANUAL.txt", FILE_WRITE);
-  }
-  Serial3.println(kirim);
-  if(file){
-    file.println(kirim);
-    file.close();
-    Serial.print("Berhasil > ");
-    Serial.println(kirim);
+  if(offlineState == true){
+    file = SD.open("OFFLINE.txt", FILE_WRITE);
+    if(file){
+      file.println(kirim);
+      Serial.println("Berhasil menulis data Offline");
+      file.close();
+    }
+  }else{
+    kirim += ";";
+    if(mode == 'O'){
+      kirim += "110011";
+      file = SD.open("OTOMATIS.txt", FILE_WRITE);
+    }else if(mode == 'M'){
+      kirim += "101101";
+      file = SD.open("MANUAL.txt", FILE_WRITE);
+    }
+    Serial3.println(kirim);
+    if(file){
+      file.println(kirim);
+      file.close();
+      Serial.println("Berhasil menulis data Online");
+    }
   }
   statusKirim = false;
   statusKirimM = false;
 }
 
-void getTime(){
-  DateTime now = rtc.now();
-  hari = namaHari[now.dayOfTheWeek()];
-  waktu = hari + ";" + now.day() + "/" + now.month() + "/" + now.year() + ";" + now.hour() + ":" + now.minute() + ":" + now.second();
+void uploadData(){
+  file = SD.open("OFFLINE.txt"); // Membuka file txt
+  if (file) {
+    // int i = 1;
+    // Serial.println(signal);
+    while (file.available() && uploadState == true) {
+      Serial.println(signal);
+      if (myTouch.dataAvailable()) {
+        myTouch.read();
+        x=myTouch.getX(); // X coordinate where the screen has been pressed
+        y=myTouch.getY();
+        //Stop Button
+        touchButton(35, 285, 130, 170, 6, drawWaitUpload, 0, 1, 1, false, false);
+        }
+      line = file.readStringUntil('\n'); // Membaca baris hingga akhir barisnya
+      kirim = line;
+      // delay(1000);
+      Serial3.println(kirim);
+      delay(1000);
+      Serial.println(kirim); // Menampilkan baris ke Serial Monitor
+      i = 0;
+      // Serial.println(signal);
+      signal = 0;
+      if(signal != 404){
+        if (myTouch.dataAvailable()) {
+          myTouch.read();
+          x=myTouch.getX(); // X coordinate where the screen has been pressed
+          y=myTouch.getY();
+          //Stop Button
+          touchButton(35, 285, 130, 170, 6, drawWaitUpload, 0, 1, 1, false, false);
+        }
+        delay(1000);
+        i += 1;
+        Serial.print("loop ke : ");
+        Serial.println(i);
+        if(Serial3.available()){
+          msg = "";
+          signal = 0;
+          while(Serial3.available()){
+            msg += char(Serial3.read());
+            delay(50);
+          }
+          Serial.print("Pesan masuk : ");
+          Serial.println(msg);
+          Serial3.println(808);
+          signal = splitString(msg, ';', 0).toInt();
+          Serial.print("Signal : ");
+          Serial.println(signal);
+          if(signal < 0){
+            Serial3.println(kirim);
+          }
+        }
+      }
+    }
+    file.close(); // Menutup file txt
+  // }
+  }
+  uploadState = false;
+  myGLCD.clrScr();
+  currentPage = "17";
+  drawDoneUpload();
 }
-// void kirimManual(){
-//   kirim = "";
-//   kirim += voltV;
-//   kirim += ";";
-//   kirim += arusA;
-//   kirim += ";";
-//   kirim += LUX;
-//   kirim += ";";
-//   kirim += suhuPanelC;
-//   kirim += ";";
-//   kirim += suhuLingkunganC;
-//   kirim += ";";
-//   Serial3.println(kirim);
-// }
