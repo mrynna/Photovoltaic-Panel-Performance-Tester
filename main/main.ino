@@ -44,7 +44,7 @@ bool offlineState = false;
 //=================================================================
 
 //=======================RTC SD Card================================
-RTC_DS1307 rtc;
+RTC_DS3231 rtc;
 File file;
 char namaHari[7][12] = {"Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"};
 String hari = "";
@@ -102,7 +102,7 @@ Adafruit_ADS1115 ads; //
 //==========Voltage Divider===========
 long adc0 = 0.0;
 float R1 = 975.0; //Resistor 1, 
-float R2 = 203000.0; //Resistor 2
+float R2 = 204500.0; //Resistor 2
 float volts0, voc = 0.0, volt = 0.0; 
 //====================================
 
@@ -118,12 +118,14 @@ byte CSs = 12;
 byte SCKs = 13;
 MAX6675 suhuCel(CSs,SOs,SCKs,1);
 MAX6675 suhuFah(CSs,SOs,SCKs,2);
+
+byte SOl = 18;
+byte CSl = 17;
+byte SCKl = 16;
+MAX6675 suhuCel2(CSl,SOl,SCKl,1);
+MAX6675 suhuFah2(CSl,SOl,SCKl,2);
 //============================================
 
-//===============Suhu DS18B20==================
-OneWire pin_DS18B20(16);
-DallasTemperature DS18B20(&pin_DS18B20);
-//=============================================
 
 //==================millis==================
 unsigned long millis1, millis2, millis3;
@@ -157,15 +159,18 @@ void setup() {
   digitalWrite(relay1, HIGH);
   digitalWrite(relay2, HIGH);
   Wire.begin();
-  DS18B20.begin();
   lightMeter.begin();
   if (! rtc.begin()) {
     Serial.println("RTC TIDAK TERBACA");
+    Serial.flush();
+    abort();
   }
-  if (! rtc.isrunning()) {
-    Serial.println("RTC is NOT running!");
+  // rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));//update rtc dari waktu komputer
+
+  if(rtc.lostPower()){
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));//update rtc dari waktu komputer
   }
+
   if (!SD.begin(53)) {
     Serial.println("sd card gagal");
   }
@@ -199,9 +204,10 @@ void setup() {
 }
 
 void loop() { 
-  Serial.print("offlineState = ");
-  Serial.println(offlineState);
+  // Serial.print("offlineState = ");
+  // Serial.println(offlineState);
   getTime(); // real time clock for data logger
+  Serial.println(waktu);
   calValue = ads.readADC_SingleEnded(1) - adc; // to get calValue value for calibration icon warning
   // Home Screen
   if (currentPage == "0") {
@@ -296,11 +302,12 @@ void loop() {
   }
   // Hal otomatis mengukur
   if (currentPage == "4") {
-    intervalOtomatis = estimasi * 16;
+    intervalOtomatis = estimasi * 3600;
     intervalOtomatis *= 1000;
     otomatis = true;
     millis3 = millis();
     while (otomatis == true){
+      getTime();
       getValueAll();
       kirim = "";
       if(statusKirim == true){
@@ -380,7 +387,7 @@ void loop() {
       x=myTouch.getX();
       y=myTouch.getY();
       touchButton(250, 290, 120, 140, 8, drawButtons);
-      touchButton(250, 290, 120, 140, 9, drawButtons);
+      touchButton(250, 290, 190, 210, 9, drawButtons);
       backButton(3, drawSetting);
     }
   }
@@ -1613,7 +1620,7 @@ void getLux() {
     myGLCD.setColor(0, 255, 0);
     myGLCD.setBackColor(0, 0, 0);
     myGLCD.printNumI(LUX, 125, 155, 7);
-    myGLCD.printNumI(lux, 125, 190, 7);
+    // myGLCD.printNumI(lux, 125, 190, 7);
     myGLCD.setFont(BigFont);
     myGLCD.print("lux", 255, 165);
   }
@@ -1759,21 +1766,20 @@ float getVoltage(int inputPin){
   }
   volts0 /= 10; // Take average from above samples
   voc = ((R1 + R2)/R1) * volts0; // convert volts0 (input Voltage) to actual Voltage (VCC)
-  if(voc < 0.05){
-    voc = 0; // if voc < 0.05, make voc = 0
+  if(voc >= -0.6 && voc < 0.05){
+    voc = 0; // if voc < 0.05 && voc >= -0.21, make voc = 0
   }else{
     // do nothing
   }
-  voc -= 1.06;
   return voc;
 }
 
 unsigned long getLuxVal(){
   lux = lightMeter.readLightLevel();
   if (lux < 20.0){
-    calLux = lux * 3.2;
+    calLux = lux * 4.1;
   }else if(lux >= 20.0 && lux < 50.0){
-    calLux = lux * 3.53;
+    calLux = lux * 3.75;
   }else if(lux >= 50.0 && lux < 120.0){
     calLux = lux * 3.1428;
   }else if(lux >= 120.0 && lux < 1000.0){
@@ -1791,13 +1797,13 @@ unsigned long getLuxVal(){
   }else if(lux >= 10000.0 && lux < 20000.0){
     calLux = lux * 3.77;
   }else if(lux >= 20000.0 && lux < 30000.0){
-    calLux = lux * 4.19;
+    calLux = lux * 4.3;
   }else if(lux >= 30000.0 && lux < 32000.0){
-    calLux = lux * 4.4;
+    calLux = lux * 4.9;
   }else if(lux >= 32000.0 && lux < 34000.0){
-    calLux = lux * 4.54;
+    calLux = lux * 4.97;
   }else if(lux >= 34000.0){
-    calLux = lux * 4.62;
+    calLux = lux * 5.05;
   }else{
     calLux = lux;
   }
@@ -1822,11 +1828,11 @@ void getRelayVA() {
   if(fase == 0){
     interval = 2000;
   }else if (fase == 1){
-    interval = 5000;
+    interval = 3000;
   }else if (fase ==2){
     interval = 2000;
   }else if (fase == 3){
-    interval = 5000;
+    interval = 3000;
   }
   if(startMillis - millis1 > interval){ 
     if(fase == 0){
@@ -1871,9 +1877,9 @@ void getRelayVA() {
 }
 
 float getPerformance(float voc, float isc, float vocNamePlate, float iscNamePlate){
-  float pVoc = (voc/vocNamePlate) * 100;
-  float pIsc = (isc/iscNamePlate) * 100;
-  float performance = (pVoc + pIsc) / 2;
+  float pNamePlate = vocNamePlate * iscNamePlate;
+  float pMeasured = voc * isc;
+  float performance = (pMeasured / pNamePlate) * 100;
   return performance;
 }
 
@@ -1905,11 +1911,10 @@ void adcCal(){
 }
 
 void getTemp(){
-  DS18B20.requestTemperatures();
   suhuPanelC = suhuCel.read_temp();
   suhuPanelF = suhuFah.read_temp();
-  suhuLingkunganC = DS18B20.getTempCByIndex(0);
-  suhuLingkunganF = DS18B20.getTempFByIndex(0);
+  suhuLingkunganC = suhuCel2.read_temp();
+  suhuLingkunganF = suhuFah2.read_temp();
 }
 
 
@@ -1958,13 +1963,26 @@ void sendESP(char mode){
   kirim += ";";
   kirim += arusA;
   kirim += ";";
-  kirim += LUX;
+  kirim += iradiasi;
   kirim += ";";
   kirim += suhuPanelC;
   kirim += ";";
   kirim += suhuLingkunganC;
+  kirim += ";";
+  kirim += performa;
   if(offlineState == true){
-    file = SD.open("OFFLINE.txt", FILE_WRITE);
+    kirim += ";";
+    if(mode == 'O'){
+      kirim += "110001";
+      kirim += ";";
+      kirim += "OTOMATIS";
+      file = SD.open("OFFLINE.txt", FILE_WRITE);
+    }else if(mode == 'M'){
+      kirim += "101001";
+      kirim += ";";
+      kirim += "MANUAL";
+      file = SD.open("OFFLINE.txt", FILE_WRITE);
+    }
     if(file){
       file.println(kirim);
       Serial.println("Berhasil menulis data Offline");
