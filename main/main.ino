@@ -12,7 +12,7 @@
 #include <SD.h>
 
 void backButton(int, void (*)(), bool = true);
-void touchButton(int, int, int, int, int, void (*)(), int = 0, int = 1, int = 1, bool = false, bool = false, bool = false, bool = false, bool = true);
+void touchButton(int, int, int, int, int, void (*)(), int = 0, int = 1, int = 0, bool = false, bool = false, bool = false, bool = false, bool = true);
 void selectUnit(int, int, int, int, char, bool istemp = false);
 void drawHomeScreen();
 void drawMultimeter();
@@ -86,8 +86,8 @@ int xR=38;
 //======================================================================================
 
 //===========Relay===========
-int relay1 = 8;
-int relay2 = 9;
+int relay1 = 9; // Tegangan
+int relay2 = 8; // Arus
 //===========================
 
 //=========Push Button=========
@@ -129,7 +129,7 @@ MAX6675 suhuFah2(CSl,SOl,SCKl,2);
 
 //==================millis==================
 unsigned long millis1, millis2, millis3;
-unsigned long startMillis;
+unsigned long startMillis, startMillis2;
 unsigned long interval = 5000;
 unsigned long manualStop = 15000;
 unsigned long intervalOtomatis = 3600000;
@@ -157,7 +157,7 @@ void setup() {
   pinMode(relay2, OUTPUT);
   pinMode(pb, INPUT_PULLUP);
   digitalWrite(relay1, HIGH);
-  digitalWrite(relay2, HIGH);
+  digitalWrite(relay2, LOW);
   Wire.begin();
   lightMeter.begin();
   if (! rtc.begin()) {
@@ -269,7 +269,7 @@ void loop() {
       
       //Back button
       if(offlineState == true){
-        touchButton(100, 216, 180, 215, 4, StopPengukuran, 0, 1, 1, false, false, false, true, false); 
+        touchButton(100, 216, 180, 215, 4, StopPengukuran, 0, 1, 0, false, false, false, true, false); 
         backButton(18, drawPerformance, false);
         offlineState == true;
       }else{
@@ -297,7 +297,7 @@ void loop() {
       //Kalibrasi
       touchButton(30, 290, 140, 180, 5, drawAdcCal);
       //Upload data
-      touchButton(30, 290, 190, 230, 6, drawUploadData, 0, 1, 1, false, true);
+      touchButton(30, 290, 190, 230, 6, drawUploadData, 0, 1, 0, false, true);
     }    
   }
   // Hal otomatis mengukur
@@ -341,7 +341,7 @@ void loop() {
   // Menu kalibrasi
   if (currentPage == "5") {
     digitalWrite(relay1, HIGH);
-    digitalWrite(relay2, LOW);
+    digitalWrite(relay2, HIGH);
     adcCal();
     if (myTouch.dataAvailable()) {
       myTouch.read();
@@ -350,7 +350,7 @@ void loop() {
       //Back button  
       backButton(3, drawSetting);
       // if we press simpan
-      touchButton(100, 216, 180, 215, 3, drawSetting, 0, 1, 1, true);
+      touchButton(100, 216, 180, 215, 3, drawSetting, 0, 1, 0, true);
     }
   }
 
@@ -364,7 +364,7 @@ void loop() {
       x=myTouch.getX();
       y=myTouch.getY();
       //Stop Button
-      touchButton(35, 285, 140, 180, 3, drawSetting, 0, 1, 1, false, false);
+      touchButton(35, 285, 140, 180, 3, drawSetting, 0, 1, 0, false, false);
     }
   }
 
@@ -377,7 +377,7 @@ void loop() {
       //Back button
       backButton(3, drawSetting);
       //Stop Button
-      touchButton(35, 285, 140, 180, 3, drawSetting, 0, 1, 1, false, false, true);
+      touchButton(35, 285, 140, 180, 3, drawSetting, 0, 1, 0, false, false, true);
     }
   }
 
@@ -637,19 +637,32 @@ void loop() {
       x=myTouch.getX();
       y=myTouch.getY();
       // If we press the Manual Button 
-      touchButton(35, 285, 80, 120, 1, drawManual, 0, 1, 1, false, false, false, false);
+      touchButton(35, 285, 80, 120, 1, drawManual, 0, 1, 0, false, false, false, false);
       // If we press the Otomatis Button 
-      touchButton(35, 285, 130, 170, 2, drawOtomatis, 0, 1, 1, false, false, false, false);
+      touchButton(35, 285, 130, 170, 2, drawOtomatis, 0, 1, 0, false, false, false, false);
       // If we press the Offline Mode button 
-      touchButton(35, 285, 180, 220, 18, drawPerformance, 0, 1, 1, false, false, false, false, false);
+      touchButton(35, 285, 180, 220, 18, drawPerformance, 0, 1, 0, false, false, false, false, false);
       // Back Button
       backButton(0, drawHomeScreen);
     }
   }
   // Multimeter
   if (currentPage == "11") {  
-    digitalWrite(relay1,HIGH);
-    digitalWrite(relay2,LOW);
+    startMillis = millis();
+    interval = 1000;
+    if(startMillis - millis1 > interval){ 
+      if(fase == 0){
+        digitalWrite(relay1, HIGH);
+        fase = 1;
+      }
+      else if(fase == 1){
+        digitalWrite(relay2, HIGH);
+        fase = 0;
+      }else{
+        fase = 0;
+      }
+      millis1 = startMillis;
+    }
     getNilaiMulti(); // calling function to display sens value
     if (myTouch.dataAvailable()) {
       myTouch.read();
@@ -657,15 +670,15 @@ void loop() {
       y=myTouch.getY();
       
       // If we press Arus
-      touchButton(5, 57, 70, 100, 12, drawArus, 0, 1, 0);
+      touchButton(5, 57, 70, 100, 12, drawArus, 0, 1, 1);
         // If we press Tegangan
-      touchButton(62, 134, 70, 100, 13, drawTegangan, 0, 0, 1);
+      touchButton(62, 134, 70, 100, 13, drawTegangan, 0, 1, 0);
       // If we press Daya
-      touchButton(139, 212, 70, 100, 14, drawDaya, 0, 1, 0);
+      touchButton(139, 212, 70, 100, 14, drawDaya, 0, 1, 1);
       // If we press Lux
-      touchButton(217, 270, 70, 100, 15, drawLux, 0, 1, 0);
+      touchButton(217, 270, 70, 100, 15, drawLux, 0, 1, 1);
       // If we press Suhu
-      touchButton(275, 315, 70, 100, 16, drawSuhu, 0, 1, 0);
+      touchButton(275, 315, 70, 100, 16, drawSuhu, 0, 1, 1);
       //Back Button
       backButton(0, drawHomeScreen);
     }
@@ -673,7 +686,7 @@ void loop() {
   //Multiimeter Arus
   if (currentPage == "12") {    
     digitalWrite(relay1,HIGH);
-    digitalWrite(relay2,LOW);
+    digitalWrite(relay2,HIGH);
     getArus(); 
     if (myTouch.dataAvailable()) {
       myTouch.read();
@@ -688,9 +701,19 @@ void loop() {
     }
   }
   //Multiimeter Tegangan
-  if (currentPage == "13") {    
-    digitalWrite(relay2,HIGH);
-    digitalWrite(relay1,LOW);
+  if (currentPage == "13") {  
+    startMillis2 = millis();
+    interval = 1000;
+    if(startMillis2 - millis2 > interval){ 
+      if(fase == 0){
+        digitalWrite(relay2, LOW);
+        fase = 1;
+      }else if(fase == 1){
+        digitalWrite(relay1, LOW);
+        fase = 0;
+      }
+      millis2 = startMillis2;
+    }
     getTegangan();
     if (myTouch.dataAvailable()) {
       myTouch.read();
@@ -708,7 +731,7 @@ void loop() {
   //Multiimeter Daya
   if (currentPage == "14") {
     digitalWrite(relay1,HIGH);
-    digitalWrite(relay2,LOW);
+    digitalWrite(relay2,HIGH);
     getDaya();
     if (myTouch.dataAvailable()) {
       myTouch.read();
@@ -761,9 +784,9 @@ void loop() {
       x=myTouch.getX();
       y=myTouch.getY();
       // If we press the Manual Button 
-      touchButton(35, 285, 80, 120, 1, drawManual, 0, 1, 1, false, false, false, true);
+      touchButton(35, 285, 80, 120, 1, drawManual, 0, 1, 0, false, false, false, true);
       // If we press the Otomatis Button 
-      touchButton(35, 285, 130, 170, 2, drawOtomatis, 0, 1, 1, false, false, false, true);
+      touchButton(35, 285, 130, 170, 2, drawOtomatis, 0, 1, 0, false, false, false, true);
       // Back Button
       backButton(10, drawPerformance);
     }
@@ -784,7 +807,7 @@ void drawBoot() {
 void drawHomeScreen() {
   otomatis = false;
   digitalWrite(relay1, HIGH);
-  digitalWrite(relay2, HIGH);
+  digitalWrite(relay2, LOW);
   pbState = 1;
   if(fase == 1 || fase == 2 || fase == 3){
     fase = 0;
@@ -994,7 +1017,7 @@ void SliderOtomatis(){
   }
   int xRC = map(xR,38,310,0,255);
 
-  estimasi = (float (xRC)/25.0 ) + 1; //convert 0 - 255, to 1 - 10
+  estimasi = (float (xRC)/35.0 ) + 1; //convert 0 - 255, to 1 - 10
   estimasi = int (estimasi);
   myGLCD.setBackColor(0, 0, 0);
   myGLCD.setColor(255, 255, 255);
@@ -1279,7 +1302,7 @@ void drawButtons(){
 void printManual() {
   getValueAll();
   myGLCD.setFont(SmallFont);
-  myGLCD.setColor(0, 255, 0);
+  myGLCD.setColor(255, 255, 255);
   myGLCD.setBackColor(0, 0, 0);
   myGLCD.printNumF(voltV, 2, 150, 80,'.', 8);
   myGLCD.printNumF(arusA, 2, 150, 105,'.', 8);
@@ -1525,7 +1548,7 @@ void getNilaiMulti(){ // Get Sens Value for Multimeter
   dayaW = getWatt(voltV, arusA);
   
   myGLCD.setFont(BigFont);
-  myGLCD.setColor(0, 255, 0);
+  myGLCD.setColor(255, 255, 255);
   myGLCD.setBackColor(0, 0, 0);
   myGLCD.printNumF(arusA ,2 ,155, 125, '.', 6);
   myGLCD.printNumF(voltV ,2 ,155, 155, '.', 6);
@@ -1539,7 +1562,7 @@ void getArus() {
   // Prints the value in A
   if (selectedUnit == '0') {
     myGLCD.setFont(SevenSegmentFull);
-    myGLCD.setColor(0, 255, 0);
+    myGLCD.setColor(255, 255, 255);
     myGLCD.setBackColor(0, 0, 0);
     myGLCD.printNumF(arusA ,2 ,110, 145);
     myGLCD.setFont(BigFont);
@@ -1548,7 +1571,7 @@ void getArus() {
     // Prints the value in mA
   if (selectedUnit == '1') {
     myGLCD.setFont(SevenSegmentFull);
-    myGLCD.setColor(0, 255, 0);
+    myGLCD.setColor(255, 255, 255);
     myGLCD.setBackColor(0, 0, 0);
     myGLCD.printNumI(arusmA, 110, 145);
     myGLCD.setFont(BigFont);
@@ -1566,7 +1589,7 @@ void getTegangan() {
   // Prints the value in V
   if (selectedUnitV == '0') {
     myGLCD.setFont(SevenSegmentFull);
-    myGLCD.setColor(0, 255, 0);
+    myGLCD.setColor(255, 255, 255);
     myGLCD.setBackColor(0, 0, 0);
     myGLCD.printNumF(voltV, 2 ,110, 145, '.', 5);
     myGLCD.setFont(BigFont);
@@ -1575,7 +1598,7 @@ void getTegangan() {
     // Prints the value in mV
   if (selectedUnitV == '1' ) {
     myGLCD.setFont(SevenSegmentFull);
-    myGLCD.setColor(0, 255, 0);
+    myGLCD.setColor(255, 255, 255);
     myGLCD.setBackColor(0, 0, 0);
     myGLCD.printNumF(voltmV , 1, 110, 145);
     myGLCD.setFont(BigFont);
@@ -1590,7 +1613,7 @@ void getDaya() {
   // Prints the value in W
   if (selectedUnitW == '0') {
     myGLCD.setFont(SevenSegmentFull);
-    myGLCD.setColor(0, 255, 0);
+    myGLCD.setColor(255, 255, 255);
     myGLCD.setBackColor(0, 0, 0);
     myGLCD.printNumF(dayaW , 2, 110, 145);
     myGLCD.setFont(BigFont);
@@ -1599,7 +1622,7 @@ void getDaya() {
     // Prints the value in mW
   if (selectedUnitW == '1' ) {
     myGLCD.setFont(SevenSegmentFull);
-    myGLCD.setColor(0, 255, 0);
+    myGLCD.setColor(255, 255, 255);
     myGLCD.setBackColor(0, 0, 0);
     myGLCD.printNumF(dayamW ,1 ,110, 145);
     myGLCD.setFont(BigFont);
@@ -1612,22 +1635,22 @@ void getLux() {
   Serial.print(" | ");
   Serial.println(LUX);
   LUX = getLuxVal();
-  iradiasi = LUX*0.0079;
+  iradiasi = getIrradiance(LUX);
   
   // Prints the value in Lux
   if (selectedUnitL == '0') { 
     myGLCD.setFont(SixteenSegment16x24);
-    myGLCD.setColor(0, 255, 0);
+    myGLCD.setColor(255, 255, 255);
     myGLCD.setBackColor(0, 0, 0);
     myGLCD.printNumI(LUX, 125, 155, 7);
     // myGLCD.printNumI(lux, 125, 190, 7);
     myGLCD.setFont(BigFont);
-    myGLCD.print("lux", 255, 165);
+    myGLCD.print("lux", 270, 165);
   }
   // Prints the value in irradiance
   if (selectedUnitL == '1') {
     myGLCD.setFont(SixteenSegment16x24);
-    myGLCD.setColor(0, 255, 0);
+    myGLCD.setColor(255, 255, 255);
     myGLCD.setBackColor(0, 0, 0);
     myGLCD.printNumF(iradiasi ,2 ,120, 155, '.', 4);
     myGLCD.setFont(BigFont);
@@ -1640,7 +1663,7 @@ void getSuhu() {
   // Prints the temp in C
   if (selectedUnitL == '0') { 
     myGLCD.setFont(SixteenSegment16x24);
-    myGLCD.setColor(0, 255, 0);
+    myGLCD.setColor(255, 255, 255);
     myGLCD.setBackColor(0, 0, 0);
     myGLCD.printNumF(suhuPanelC, 2 , 120, 140, '.', 6);
     myGLCD.printNumF(suhuLingkunganC, 2, 120, 190, '.', 6);
@@ -1650,7 +1673,7 @@ void getSuhu() {
   // Prints the temp in F
   if (selectedUnitL == '1') {
     myGLCD.setFont(SixteenSegment16x24);
-    myGLCD.setColor(0, 255, 0);
+    myGLCD.setColor(255, 255, 255);
     myGLCD.setBackColor(0, 0, 0);
     myGLCD.printNumF(suhuPanelF, 2, 120, 140, '.', 6);
     myGLCD.printNumF(suhuLingkunganF, 2, 120, 190, '.', 6);
@@ -1672,6 +1695,7 @@ void drawFrame(int x1, int y1, int x2, int y2) {
 // Tombol Back
 void backButton(int page, void(*function)(), bool frommenu = true){
   fromMenu = frommenu;
+  fase = 0;
   if ((x>=10) && (x<=60) &&(y>=10) && (y<=60)) {
     drawFrame(10, 10, 60, 36);
     uploadState = false;
@@ -1682,7 +1706,7 @@ void backButton(int page, void(*function)(), bool frommenu = true){
   }
 }
 
-void touchButton(int x1, int x2, int y1, int y2, int page, void(*function)(), int fase = 0, int relay1State = 1, int relay2State = 1, bool savesetting = false, bool upload = false, bool delData = false, bool offlinestate = false, bool frommenu = true){
+void touchButton(int x1, int x2, int y1, int y2, int page, void(*function)(), int fase = 0, int relay1State = 1, int relay2State = 0, bool savesetting = false, bool upload = false, bool delData = false, bool offlinestate = false, bool frommenu = true){
   fromMenu = frommenu;
   offlineState = offlinestate;
   uploadState = upload;
@@ -1819,7 +1843,7 @@ void getValueAll(){
   getRelayVA();
   getTemp();
   LUX = getLuxVal();
-  iradiasi = LUX * 0.0079;
+  iradiasi = getIrradiance(LUX);
   performa = getPerformance(voltV, arusA, vocData.toFloat(), iscData.toFloat());
 }
 
@@ -1851,7 +1875,7 @@ void getRelayVA() {
       statusKirimM = false;
     }
     else if(fase == 2){
-      digitalWrite(relay2, LOW);
+      digitalWrite(relay2, HIGH);
       for(int i = 0; i < 10; i++){
         arusA = getCurrent(1, adc);
       }
@@ -1860,7 +1884,7 @@ void getRelayVA() {
       statusKirimM = false;
     }
     else if(fase = 3){
-      digitalWrite(relay2, HIGH);
+      digitalWrite(relay2, LOW);
       statusKirim = true;
       statusKirimM = true;
       fase = 0;
@@ -1911,10 +1935,10 @@ void adcCal(){
 }
 
 void getTemp(){
-  suhuPanelC = suhuCel.read_temp();
-  suhuPanelF = suhuFah.read_temp();
-  suhuLingkunganC = suhuCel2.read_temp();
-  suhuLingkunganF = suhuFah2.read_temp();
+  suhuPanelC = suhuCel.read_temp() - 4;
+  suhuPanelF = ((suhuPanelC*1.8) + 32);
+  suhuLingkunganC = suhuCel2.read_temp() - 6;
+  suhuLingkunganF = ((suhuLingkunganC*1.8) + 32);
 }
 
 
@@ -2020,7 +2044,7 @@ void uploadData(){
         x=myTouch.getX(); // X coordinate where the screen has been pressed
         y=myTouch.getY();
         //Stop Button
-        touchButton(35, 285, 130, 170, 6, drawWaitUpload, 0, 1, 1, false, false);
+        touchButton(35, 285, 130, 170, 6, drawWaitUpload, 0, 1, 0, false, false);
         }
       line = file.readStringUntil('\n'); // Membaca baris hingga akhir barisnya
       kirim = line;
@@ -2037,7 +2061,7 @@ void uploadData(){
           x=myTouch.getX(); // X coordinate where the screen has been pressed
           y=myTouch.getY();
           //Stop Button
-          touchButton(35, 285, 130, 170, 6, drawWaitUpload, 0, 1, 1, false, false);
+          touchButton(35, 285, 130, 170, 6, drawWaitUpload, 0, 1, 0, false, false);
         }
         delay(1000);
         i += 1;
@@ -2069,4 +2093,28 @@ void uploadData(){
   myGLCD.clrScr();
   currentPage = "17";
   drawDoneUpload();
+}
+
+float getIrradiance(unsigned long lux){
+  float irradiance = lux * 0.0079;
+  if (irradiance >= 210 && irradiance < 550) {
+    irradiance /= 1.1103;
+  }else if(irradiance >= 550 && irradiance < 650){
+    irradiance /= 1.129;
+  }else if(irradiance >= 650 && irradiance < 850){
+    irradiance /= 1.26;
+  }else if(irradiance >= 850 && irradiance < 1050){
+    irradiance /= 1.3;
+  }else if(irradiance >= 850 && irradiance < 1050){
+    irradiance /= 1.32;
+  }else if(irradiance >= 1050 && irradiance < 1250){
+    irradiance /= 1.35;
+  }else if(irradiance >= 1250 && irradiance < 1400){
+    irradiance /= 1.387;
+  }else if(irradiance >= 1400){
+    irradiance /= 1.4;
+  }else{
+    irradiance = irradiance;
+  }
+  return irradiance;
 }
