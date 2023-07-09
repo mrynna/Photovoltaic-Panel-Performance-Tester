@@ -130,7 +130,7 @@ MAX6675 suhuFah2(CSl,SOl,SCKl,2);
 //==================millis==================
 unsigned long millis1, millis2, millis3;
 unsigned long startMillis, startMillis2;
-unsigned long interval = 5000;
+unsigned long interval = 2000;
 unsigned long manualStop = 15000;
 unsigned long intervalOtomatis = 3600000;
 
@@ -207,7 +207,7 @@ void loop() {
   // Serial.print("offlineState = ");
   // Serial.println(offlineState);
   getTime(); // real time clock for data logger
-  Serial.println(waktu);
+  // Serial.println(waktu);
   calValue = ads.readADC_SingleEnded(1) - adc; // to get calValue value for calibration icon warning
   // Home Screen
   if (currentPage == "0") {
@@ -331,7 +331,6 @@ void loop() {
           drawFrame(35, 90, 285, 130);
           otomatis = false;
           currentPage = "0";
-          sendESP('O');
           myGLCD.clrScr();
           drawHomeScreen();
         }
@@ -1631,9 +1630,6 @@ void getDaya() {
 }
 
 void getLux() {
-  Serial.print(lux);
-  Serial.print(" | ");
-  Serial.println(LUX);
   LUX = getLuxVal();
   iradiasi = getIrradiance(LUX);
   
@@ -1849,15 +1845,7 @@ void getValueAll(){
 
 void getRelayVA() {
   startMillis = millis();
-  if(fase == 0){
-    interval = 2000;
-  }else if (fase == 1){
-    interval = 3000;
-  }else if (fase ==2){
-    interval = 2000;
-  }else if (fase == 3){
-    interval = 3000;
-  }
+
   if(startMillis - millis1 > interval){ 
     if(fase == 0){
       digitalWrite(relay1, LOW);
@@ -1867,12 +1855,14 @@ void getRelayVA() {
       fase = 1;
       statusKirim = false;
       statusKirimM = false;
+      interval = 2000;
     }
     else if(fase == 1){
       digitalWrite(relay1, HIGH);
       fase = 2;
       statusKirim = false;
       statusKirimM = false;
+      interval = 2000;
     }
     else if(fase == 2){
       digitalWrite(relay2, HIGH);
@@ -1882,6 +1872,7 @@ void getRelayVA() {
       fase = 3;
       statusKirim = false;
       statusKirimM = false;
+      interval = 2000;
     }
     else if(fase = 3){
       digitalWrite(relay2, LOW);
@@ -1889,6 +1880,11 @@ void getRelayVA() {
       statusKirimM = true;
       fase = 0;
       pbState = 1;
+      if(otomatis == true){
+        interval = 593000;
+      }else{
+        interval = 1000;
+      }
     }
     else{
       statusKirim = false;
@@ -1945,7 +1941,7 @@ void getTemp(){
 void getTime(){
   DateTime now = rtc.now();
   hari = namaHari[now.dayOfTheWeek()];
-  waktu = hari + ";" + now.day() + "/" + now.month() + "/" + now.year() + ";" + now.hour() + ":" + now.minute() + ":" + now.second();
+  waktu = hari + ";" + now.year() + "-" + now.month() + "-" + now.day() + " " + now.hour() + ":" + now.minute() + ":" + now.second();
 }
 
 String splitString(String data, char separator, int index)
@@ -1970,10 +1966,7 @@ void saveSetting(){
       String simpanData = vocData + ";" + iscData + ";" + adc;
       file.print(simpanData);
       file.close();
-      // Serial.print("Berhasil > ");
-      // Serial.println(simpanData);
     }else{
-      // Serial.print("Gagal membuka file")
     }
 }
 
@@ -2025,7 +2018,7 @@ void sendESP(char mode){
     if(file){
       file.println(kirim);
       file.close();
-      Serial.println("Berhasil menulis data Online");
+      Serial.println("Berhasil mengirim data Online ke ESP");
     }
   }
   statusKirim = false;
@@ -2067,22 +2060,25 @@ void uploadData(){
         i += 1;
         Serial.print("loop ke : ");
         Serial.println(i);
-        if(Serial3.available()){
-          msg = "";
-          signal = 0;
-          while(Serial3.available()){
-            msg += char(Serial3.read());
-            delay(50);
-          }
+        const unsigned long SERIAL_TIMEOUT = 100; // Timeout in milliseconds
+        unsigned long serialStartTime = millis();
+        signal = 0;
+        msg = "";
+        
+        while (Serial.available() && millis() - serialStartTime < SERIAL_TIMEOUT) {
+          msg += char(Serial.read());
+        }
+        if (msg.endsWith("\n")) {
+          msg.trim();
           Serial.print("Pesan masuk : ");
           Serial.println(msg);
-          Serial3.println(808);
           signal = splitString(msg, ';', 0).toInt();
-          Serial.print("Signal : ");
-          Serial.println(signal);
-          if(signal < 0){
-            Serial3.println(kirim);
-          }
+        }
+        Serial3.println(808);
+        Serial.print("Signal : ");
+        Serial.println(signal);
+        if(signal < 0){
+          Serial3.println(kirim);
         }
       }
     }
