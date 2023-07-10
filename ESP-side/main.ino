@@ -108,10 +108,10 @@ void loop() {
     waktu = splitString(msg, ';', 1);
     tegangan = splitString(msg, ';', 2).toFloat();
     arus = splitString(msg, ';', 3).toFloat();
-    iradiasi = splitString(msg, ';', 4).toInt();
+    iradiasi = splitString(msg, ';', 4).toFloat();
     suhuPanel = splitString(msg, ';', 5).toFloat();
     suhuLingkungan = splitString(msg, ';', 6).toFloat();
-    performa = splitString(msg, ';', 7).toInt();
+    performa = splitString(msg, ';', 7).toFloat();
     mode = splitString(msg, ';', 8).toInt();
   }
   msg = "";

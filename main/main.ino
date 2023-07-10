@@ -330,6 +330,8 @@ void loop() {
         if ((x>=35) && (x<=285) &&(y>=90) && (y<=130)) {
           drawFrame(35, 90, 285, 130);
           otomatis = false;
+          interval = 2000;
+          fase = 0;
           currentPage = "0";
           myGLCD.clrScr();
           drawHomeScreen();
