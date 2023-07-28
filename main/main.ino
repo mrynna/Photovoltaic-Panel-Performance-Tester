@@ -308,7 +308,7 @@ void loop() {
     millis3 = millis();
     while (otomatis == true){
       getTime();
-      getValueAll();
+      getRelayVA();
       kirim = "";
       if(statusKirim == true){
         // kirimOtomatis();
@@ -1301,7 +1301,7 @@ void drawButtons(){
 
 // ===================================== Menampilkan niilai Hasil Pengukuran =====================================
 void printManual() {
-  getValueAll();
+  getRelayVA();
   myGLCD.setFont(SmallFont);
   myGLCD.setColor(255, 255, 255);
   myGLCD.setBackColor(0, 0, 0);
@@ -1834,14 +1834,6 @@ float getWatt(float volt, float arus){
   return watt;
 }
 
-void getValueAll(){
-  getRelayVA();
-  getTemp();
-  LUX = getLuxVal();
-  iradiasi = getIrradiance(LUX);
-  performa = getPerformance(voltV, arusA, vocData.toFloat(), iscData.toFloat());
-}
-
 void getRelayVA() {
   startMillis = millis();
 
@@ -1869,6 +1861,10 @@ void getRelayVA() {
         arusA = getCurrent(1, adc);
       }
       fase = 3;
+      LUX = getLuxVal();
+      iradiasi = getIrradiance(LUX);
+      getTemp();
+      performa = getPerformance(voltV, arusA, vocData.toFloat(), iscData.toFloat());
       statusKirim = false;
       statusKirimM = false;
       interval = 2000;
