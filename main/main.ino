@@ -101,8 +101,8 @@ Adafruit_ADS1115 ads; //
 
 //==========Voltage Divider===========
 long adc0 = 0.0;
-float R1 = 975.0; //Resistor 1, 
-float R2 = 204500.0; //Resistor 2
+float R1 = 950.0; //Resistor 1, 975.0
+float R2 = 203000.0; //Resistor 2 / 204500
 float volts0, voc = 0.0, volt = 0.0; 
 //====================================
 
@@ -1764,9 +1764,6 @@ float getCurrent(int inputPin, int adc){
   current = 0.0;
   // for(int i = 0; i < 10; i++){
   adc1 = ads.readADC_SingleEnded(inputPin) - adc; // read ADC from inputPin of ADS1115
-  //   current += ads.computeVolts(adc1) * 100; // convert ADS1115 ADC to Voltage, 10 (ACS758 200B sensitivity) equals to 100 multiplier
-  //   delay(1);
-  // }
   current = ads.computeVolts(adc1) * 100; // convert ADS1115 A0 ADC to Voltage
   // current /= 10;
   // current = (volts1 - 2.5) * 100; // convert Voltage (volts variable) to Current
@@ -1933,9 +1930,11 @@ void adcCal(){
 }
 
 void getTemp(){
-  suhuPanelC = suhuCel.read_temp() - 4;
-  suhuPanelF = ((suhuPanelC*1.8) + 32);
-  suhuLingkunganC = suhuCel2.read_temp() - 6;
+  // suhuPanelC = suhuCel.read_temp();
+  suhuPanelC = (((suhuCel.read_temp())  - 5.0628) / 0.99); // -6
+  suhuPanelF = ((suhuPanelC*1.8) + 32); 
+  // suhuLingkunganC = suhuCel2.read_temp();
+  suhuLingkunganC = (((suhuCel2.read_temp()) - 7.4146) / 0.9934); // - 7
   suhuLingkunganF = ((suhuLingkunganC*1.8) + 32);
 }
 
