@@ -167,9 +167,9 @@ void setup() {
   }
   // rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));//update rtc dari waktu komputer
 
-  if(rtc.lostPower()){
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));//update rtc dari waktu komputer
-  }
+  // if(rtc.lostPower()){
+  //   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));//update rtc dari waktu komputer
+  // }
 
   if (!SD.begin(53)) {
     Serial.println("sd card gagal");
@@ -632,7 +632,7 @@ void loop() {
   }
 
   // Performance
-  if (currentPage == "10") {    
+  if (currentPage == "10") {   
     if (myTouch.dataAvailable()) {
       myTouch.read();
       x=myTouch.getX();
@@ -865,7 +865,7 @@ void drawPerformance() {
   myGLCD.setFont(BigFont);
   myGLCD.setBackColor(100, 155, 203);
   myGLCD.print("<-", 18, 15);
-  
+
   // Button - Manual 
   myGLCD.setColor(12, 171, 182);
   myGLCD.fillRoundRect (35, 80, 285, 120);
@@ -1145,6 +1145,8 @@ void drawMultimeter() {
   myGLCD.setBackColor(0, 0, 0);
   myGLCD.setFont(SmallFont);
   myGLCD.print("Back to Main Menu", 70, 18);
+
+ 
 
   myGLCD.setFont(BigFont);
   myGLCD.print("Multimeter", CENTER, 45);
@@ -1544,6 +1546,7 @@ void getNilaiMulti(){ // Get Sens Value for Multimeter
   voltV = getVoltage(0);
   if(voltV < 0){
     voltV *= -1;
+    voltV -= 1.13;
   }
   LUX = getLuxVal();
   dayaW = getWatt(voltV, arusA);
@@ -1584,6 +1587,7 @@ void getTegangan() {
   voltV = getVoltage(0);
   if(voltV < 0){
     voltV *= -1;
+    voltV -= 1.13;
   }
   float voltmV= voltV*1000.0;
  
@@ -1928,9 +1932,15 @@ void adcCal(){
 void getTemp(){
   // suhuPanelC = suhuCel.read_temp();
   suhuPanelC = (((suhuCel.read_temp())  - 5.0628) / 0.99); // -6
+  if(suhuPanelC < (-17.0) && suhuPanelC >= (-18.0) ){
+    suhuPanelC = 0;
+  }
   suhuPanelF = ((suhuPanelC*1.8) + 32); 
   // suhuLingkunganC = suhuCel2.read_temp();
   suhuLingkunganC = (((suhuCel2.read_temp()) - 7.4146) / 0.9934); // - 7
+  if( suhuLingkunganC < (-24.0) && suhuLingkunganC >= (-25.0) ){
+    suhuLingkunganC = 0;
+  }
   suhuLingkunganF = ((suhuLingkunganC*1.8) + 32);
 }
 
