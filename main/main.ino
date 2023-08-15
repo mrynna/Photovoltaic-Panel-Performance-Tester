@@ -1645,7 +1645,7 @@ void getLux() {
     myGLCD.setColor(255, 255, 255);
     myGLCD.setBackColor(0, 0, 0);
     myGLCD.printNumI(LUX, 125, 155, 7);
-    // myGLCD.printNumI(lux, 125, 190, 7);
+    myGLCD.printNumI(lux, 125, 190, 7);
     myGLCD.setFont(BigFont);
     myGLCD.print("lux", 270, 165);
   }
@@ -1795,42 +1795,6 @@ float getVoltage(int inputPin){
     // do nothing
   }
   return voc;
-}
-
-unsigned long getLuxVal(){
-  lux = lightMeter.readLightLevel();
-  if (lux < 20.0){
-    calLux = lux * 4.1;
-  }else if(lux >= 20.0 && lux < 50.0){
-    calLux = lux * 3.75;
-  }else if(lux >= 50.0 && lux < 120.0){
-    calLux = lux * 3.1428;
-  }else if(lux >= 120.0 && lux < 1000.0){
-    calLux = lux * 3.12;
-  }else if(lux >= 1000.0 && lux < 2000.0){
-    calLux = lux * 3.02;
-  }else if(lux >= 2000.0 && lux < 3000.0){
-    calLux = lux * 3.18;
-  }else if(lux >= 3000.0 && lux < 4000.0){
-    calLux = lux * 3.31;
-  }else if(lux >= 4000.0 && lux < 5000.0){
-    calLux = lux * 3.47;
-  }else if(lux >= 5000.0 && lux < 10000.0){
-    calLux = lux * 3.54;
-  }else if(lux >= 10000.0 && lux < 20000.0){
-    calLux = lux * 3.77;
-  }else if(lux >= 20000.0 && lux < 30000.0){
-    calLux = lux * 4.3;
-  }else if(lux >= 30000.0 && lux < 32000.0){
-    calLux = lux * 4.9;
-  }else if(lux >= 32000.0 && lux < 34000.0){
-    calLux = lux * 4.97;
-  }else if(lux >= 34000.0){
-    calLux = lux * 5.05;
-  }else{
-    calLux = lux;
-  }
-  return calLux;
 }
 
 float getWatt(float volt, float arus){
@@ -2098,26 +2062,128 @@ void uploadData(){
   drawDoneUpload();
 }
 
+unsigned long getLuxVal(){
+  lux = lightMeter.readLightLevel();
+  calLux = (lux - 0.0485) / 0.2552;
+  return calLux;
+}
+
 float getIrradiance(unsigned long lux){
   float irradiance = lux * 0.0079;
-  if (irradiance >= 210 && irradiance < 550) {
-    irradiance /= 1.1103;
-  }else if(irradiance >= 550 && irradiance < 650){
-    irradiance /= 1.129;
-  }else if(irradiance >= 650 && irradiance < 850){
-    irradiance /= 1.26;
-  }else if(irradiance >= 850 && irradiance < 1050){
-    irradiance /= 1.3;
-  }else if(irradiance >= 850 && irradiance < 1050){
-    irradiance /= 1.32;
-  }else if(irradiance >= 1050 && irradiance < 1250){
-    irradiance /= 1.35;
-  }else if(irradiance >= 1250 && irradiance < 1400){
-    irradiance /= 1.387;
-  }else if(irradiance >= 1400){
-    irradiance /= 1.4;
-  }else{
-    irradiance = irradiance;
-  }
   return irradiance;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// unsigned long getLuxVal(){
+//   lux = lightMeter.readLightLevel();
+//   if (lux < 20.0){
+//     calLux = lux * 4.1;
+//   }else if(lux >= 20.0 && lux < 50.0){
+//     calLux = lux * 3.75;
+//   }else if(lux >= 50.0 && lux < 120.0){
+//     calLux = lux * 3.1428;
+//   }else if(lux >= 120.0 && lux < 1000.0){
+//     calLux = lux * 3.12;
+//   }else if(lux >= 1000.0 && lux < 2000.0){
+//     calLux = lux * 3.02;
+//   }else if(lux >= 2000.0 && lux < 3000.0){
+//     calLux = lux * 3.18;
+//   }else if(lux >= 3000.0 && lux < 4000.0){
+//     calLux = lux * 3.31;
+//   }else if(lux >= 4000.0 && lux < 5000.0){
+//     calLux = lux * 3.47;
+//   }else if(lux >= 5000.0 && lux < 10000.0){
+//     calLux = lux * 3.54;
+//   }else if(lux >= 10000.0 && lux < 20000.0){
+//     calLux = lux * 3.77;
+//   }else if(lux >= 20000.0 && lux < 30000.0){
+//     calLux = lux * 4.3;
+//   }else if(lux >= 30000.0 && lux < 32000.0){
+//     calLux = lux * 4.9;
+//   }else if(lux >= 32000.0 && lux < 34000.0){
+//     calLux = lux * 4.97;
+//   }else if(lux >= 34000.0){
+//     calLux = lux * 5.05;
+//   }else{
+//     calLux = lux;
+//   }
+//   return calLux;
+// }
+
+// float getIrradiance(unsigned long lux){
+//   float irradiance = lux * 0.0079;
+//   if (irradiance >= 210 && irradiance < 550) {
+//     irradiance /= 1.1103;
+//   }else if(irradiance >= 550 && irradiance < 650){
+//     irradiance /= 1.129;
+//   }else if(irradiance >= 650 && irradiance < 850){
+//     irradiance /= 1.26;
+//   }else if(irradiance >= 850 && irradiance < 1050){
+//     irradiance /= 1.3;
+//   }else if(irradiance >= 850 && irradiance < 1050){
+//     irradiance /= 1.32;
+//   }else if(irradiance >= 1050 && irradiance < 1250){
+//     irradiance /= 1.35;
+//   }else if(irradiance >= 1250 && irradiance < 1400){
+//     irradiance /= 1.387;
+//   }else if(irradiance >= 1400){
+//     irradiance /= 1.4;
+//   }else{
+//     irradiance = irradiance;
+//   }
+//   return irradiance;
+// }
+
+
+// float getIrradiance(unsigned long lux){
+//   float irradiance = lux * 0.0079;
+//   if (irradiance >= 210 && irradiance < 550) {
+//     irradiance /= 1.1103;
+//   }else if(irradiance >= 550 && irradiance < 650){
+//     irradiance /= 1.129;
+//   }else if(irradiance >= 650 && irradiance < 850){
+//     irradiance /= 1.18;
+//   }else if(irradiance >= 850 && irradiance < 1050){
+//     irradiance /= 1.22;
+//   }else if(irradiance >= 1050 && irradiance < 1250){
+//     irradiance /= 1.25;
+//   }else if(irradiance >= 1250 && irradiance < 1400){
+//     irradiance /= 1.28;
+//   }else if(irradiance >= 1400){
+//     irradiance /= 1.3;
+//   }else{
+//     irradiance = irradiance;
+//   }
+//   return irradiance;
+// }
